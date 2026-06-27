@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Radio, Send, Bell } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 
 const Broadcast: React.FC = () => {
   const [title, setTitle] = useState('');
@@ -13,10 +15,17 @@ const Broadcast: React.FC = () => {
     setIsConfirmOpen(true);
   };
 
-  const confirmSend = () => {
-    setTitle('');
-    setMessage('');
-    // success simulation
+  const confirmSend = async () => {
+    try {
+      await api.post('/broadcast', { title, message });
+      toast.success('Pesan siaran berhasil dikirim ke seluruh anggota');
+      setTitle('');
+      setMessage('');
+    } catch (error) {
+      toast.error('Gagal mengirim pesan siaran');
+    } finally {
+      setIsConfirmOpen(false);
+    }
   };
 
   return (

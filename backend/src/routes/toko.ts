@@ -37,6 +37,52 @@ router.post('/produk', auditLog('CREATE_PRODUK', 'Produk'), async (req: Request,
   }
 });
 
+// PUT update product
+router.put('/produk/:id', auditLog('UPDATE_PRODUK', 'Produk'), async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { nama, kategori, hargaJual, hargaModal, stok, gambarUrl } = req.body;
+    const product = await prisma.produk.update({
+      where: { id },
+      data: {
+        nama,
+        kategori,
+        hargaJual: parseFloat(hargaJual),
+        hargaModal: parseFloat(hargaModal),
+        stok: parseInt(stok),
+        gambarUrl
+      }
+    });
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal mengubah produk' });
+  }
+});
+
+// DELETE product
+router.delete('/produk/:id', auditLog('DELETE_PRODUK', 'Produk'), async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    await prisma.produk.delete({ where: { id } });
+    res.json({ message: 'Produk berhasil dihapus' });
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal menghapus produk' });
+  }
+});
+
+// GET all orders (Untuk POS dashboard)
+router.get('/order', async (req: Request, res: Response) => {
+  try {
+    const orders = await prisma.order.findMany({
+      include: { tagihanPaylater: { include: { anggota: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal mengambil data pesanan' });
+  }
+});
+
 // POST Checkout (POS & Mobile)
 router.post('/checkout', async (req: Request, res: Response): Promise<any> => {
   try {
@@ -88,17 +134,7 @@ router.post('/checkout', async (req: Request, res: Response): Promise<any> => {
           data: { saldo: simpanan.saldo - totalHarga }
         });
       } else if (metodePembayaran === 'PAYLATER') {
-        // Cek limit paylater (misal 50% dari sisa gaji, di sini kita hardcode limit sederhana)
-        const limitPaylater = 2000000; 
-        const tagihanAktif = await tx.tagihanPaylater.aggregate({
-          where: { anggotaId, status: 'BELUM_BAYAR' },
-          _sum: { nominal: true }
-        });
-        const hutangBerjalan = tagihanAktif._sum.nominal || 0;
-        
-        if (hutangBerjalan + totalHarga > limitPaylater) {
-          throw new Error('Pembelian ditolak. Melebihi limit Paylater Anda (Rp 2.000.000)');
-        }
+        throw new Error('Fitur Kasbon / Paylater Toko (Coming Soon) belum dapat digunakan.');
       }
 
       // Buat Order

@@ -42,6 +42,24 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET all angsuran
+router.get('/angsuran', async (req: Request, res: Response) => {
+  try {
+    const angsuran = await prisma.angsuran.findMany({
+      include: { 
+        pinjaman: {
+          include: { anggota: true }
+        }
+      },
+      orderBy: { jatuhTempo: 'asc' }
+    });
+    res.json(angsuran);
+  } catch (error) {
+    console.error('Error fetching angsuran:', error);
+    res.status(500).json({ error: 'Gagal mengambil data angsuran' });
+  }
+});
+
 // POST new pinjaman
 router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipGajiFile', maxCount: 1 }]), async (req: Request, res: Response): Promise<any> => {
   try {
@@ -59,9 +77,19 @@ router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipG
     const fileKtpUrl = files['ktpFile'] ? `/uploads/${files['ktpFile'][0].filename}` : null;
     const fileSlipGajiUrl = files['slipGajiFile'] ? `/uploads/${files['slipGajiFile'][0].filename}` : null;
 
-    // Hitung potongan biaya admin (misal 1%)
-    const biayaAdmin = parsedNominal * 0.01;
-    const nominalCair = parsedNominal - biayaAdmin;
+    // Ambil Pengaturan Biaya
+    const settingAdmin = await prisma.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_ADMIN_PINJAMAN' } });
+    const settingAsuransi = await prisma.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_ASURANSI_PINJAMAN' } });
+    const settingBunga = await prisma.pengaturanUmum.findFirst({ where: { kategori: 'BUNGA_PINJAMAN' } });
+
+    // Asumsi nilai persentase, default 1% admin, 0.5% asuransi, 1.5% bunga
+    const persenAdmin = settingAdmin ? parseFloat(settingAdmin.nilai) : 1.0;
+    const persenAsuransi = settingAsuransi ? parseFloat(settingAsuransi.nilai) : 0.5;
+    const bungaPersen = settingBunga ? parseFloat(settingBunga.nilai) : 1.5;
+
+    const biayaAdmin = parsedNominal * (persenAdmin / 100);
+    const biayaAsuransi = parsedNominal * (persenAsuransi / 100);
+    const nominalCair = parsedNominal - biayaAdmin - biayaAsuransi;
 
     const newPinjaman = await prisma.pinjaman.create({
       data: {
@@ -69,8 +97,9 @@ router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipG
         nominal: parsedNominal,
         tenor: parseInt(tenor),
         skemaBunga: skemaBunga || 'FLAT',
-        bungaPersen: 1.5, // 1.5% per bulan
+        bungaPersen: bungaPersen,
         biayaAdmin,
+        biayaAsuransi,
         nominalCair,
         plafonMaksimal: plafon,
         status: parsedNominal >= 10000000 ? 'PENDING_KETUA' : 'PENDING_ADMIN',
@@ -119,7 +148,7 @@ router.put('/:id/status', async (req: Request, res: Response): Promise<any> => {
         
         await tx.jurnalUmum.create({
           data: {
-            keterangan: `Pencairan Pinjaman (ID: ${pinjaman.id}) a/n Anggota ${pinjaman.anggotaId}. Nominal: ${pinjaman.nominal}, Potongan: ${pinjaman.biayaAdmin}`,
+            keterangan: `Pencairan Pinjaman (ID: ${pinjaman.id}) a/n Anggota ${pinjaman.anggotaId}. Nominal: ${pinjaman.nominal}, Potongan Admin: ${pinjaman.biayaAdmin}, Potongan Asuransi: ${pinjaman.biayaAsuransi}`,
             jenis: 'KREDIT',
             nominal: pinjaman.nominalCair,
             saldoSetelahnya: saldoBaru,

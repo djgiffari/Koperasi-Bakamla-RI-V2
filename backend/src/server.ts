@@ -20,9 +20,19 @@ import tokoRoutes from './routes/toko';
 import shuRoutes from './routes/shu';
 import chatRoutes from './routes/chat';
 
+import usersRoutes from './routes/users';
+import laporanRoutes from './routes/laporan';
+import logsRoutes from './routes/logs';
+
+import broadcastRoutes from './routes/broadcast';
+
 import prisma from './utils/prisma';
+import { startScheduler } from './utils/scheduler';
 
 dotenv.config();
+
+// Start Background Jobs
+startScheduler();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +61,7 @@ app.use('/uploads', express.static(uploadDir));
 
 // Rest API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/anggota', anggotaRoutes);
 app.use('/api/simpanan', simpananRoutes);
 app.use('/api/pinjaman', pinjamanRoutes);
@@ -60,6 +71,9 @@ app.use('/api/pengaturan', pengaturanRoutes);
 app.use('/api/toko', tokoRoutes);
 app.use('/api/shu', shuRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/laporan', laporanRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/broadcast', broadcastRoutes);
 
 // Root route
 app.get('/', (req, res) => {
