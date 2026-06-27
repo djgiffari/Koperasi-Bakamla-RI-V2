@@ -13,6 +13,7 @@ RUN npm install --include=dev
 COPY . .
 
 # Build the application for production
+ENV NODE_OPTIONS="--max_old_space_size=512"
 RUN npm run build
 
 # Stage 2: Serve the application with Nginx
