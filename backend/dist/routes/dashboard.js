@@ -89,4 +89,47 @@ router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.status(500).json({ error: 'Gagal mengambil data dashboard' });
     }
 }));
+router.get('/mobile/:anggotaId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const anggotaId = parseInt(req.params.anggotaId);
+        // Validate member
+        const anggota = yield prisma_1.default.anggota.findUnique({
+            where: { id: anggotaId }
+        });
+        if (!anggota) {
+            return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+        }
+        // Hitung total simpanan anggota
+        const simpananList = yield prisma_1.default.simpanan.findMany({
+            where: { anggotaId }
+        });
+        const totalSimpanan = simpananList.reduce((acc, curr) => acc + curr.saldo, 0);
+        // Hitung sisa pinjaman anggota
+        const pinjamanList = yield prisma_1.default.pinjaman.findMany({
+            where: {
+                anggotaId,
+                status: 'DICAIRKAN'
+            },
+            include: {
+                angsuran: true
+            }
+        });
+        let sisaPinjaman = 0;
+        for (const p of pinjamanList) {
+            const angsuranLunas = p.angsuran.filter(a => a.status === 'LUNAS').reduce((acc, curr) => acc + curr.nominalPokok, 0);
+            const totalHutang = p.nominal; // Simplifikasi: nominal awal adalah total hutang
+            sisaPinjaman += (totalHutang - angsuranLunas);
+        }
+        res.json({
+            anggotaId: anggota.id,
+            namaLengkap: anggota.namaLengkap,
+            totalSimpanan,
+            sisaPinjaman
+        });
+    }
+    catch (error) {
+        console.error('Error fetching mobile dashboard data:', error);
+        res.status(500).json({ error: 'Gagal mengambil data dashboard mobile' });
+    }
+}));
 exports.default = router;

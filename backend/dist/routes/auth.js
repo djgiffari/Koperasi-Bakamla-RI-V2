@@ -14,45 +14,63 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-// import { PrismaClient } from '@prisma/client';
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
-// const prisma = new PrismaClient();
+const prisma = new client_1.PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_koperasi_bakamla_v2';
-// Login Route
+// Login Route (Web Admin)
 router.post('/login', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { username, password } = req.body;
     try {
-        // For now, we will use a dummy admin check until Prisma schema is fully ready and migrated.
-        if (username === 'admin' && password === 'admin123') {
-            const token = jsonwebtoken_1.default.sign({ id: 1, role: 'ADMIN', username: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
-            // Send token and basic user info
-            return res.json({
-                message: 'Login berhasil',
-                token,
-                user: { id: 1, username: 'admin', role: 'ADMIN', name: 'Administrator' }
-            });
-        }
-        // Example of actual DB check once schema is generated:
-        /*
-        const user = await prisma.user.findUnique({ where: { username } });
+        const user = yield prisma.user.findUnique({ where: { username } });
         if (!user) {
-          return res.status(401).json({ error: 'Username atau password salah' });
+            return res.status(401).json({ error: 'Username atau password salah' });
         }
-        const isPasswordValid = await bcrypt.compare(password, user.password);
+        const isPasswordValid = yield bcrypt_1.default.compare(password, user.password);
         if (!isPasswordValid) {
-          return res.status(401).json({ error: 'Username atau password salah' });
+            return res.status(401).json({ error: 'Username atau password salah' });
         }
-        const token = jwt.sign(
-          { id: user.id, role: user.role, username: user.username },
-          JWT_SECRET,
-          { expiresIn: '1d' }
-        );
+        const token = jsonwebtoken_1.default.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ message: 'Login berhasil', token, user });
-        */
-        return res.status(401).json({ error: 'Username atau password salah' });
     }
     catch (error) {
         console.error('Login error:', error);
+        res.status(500).json({ error: 'Terjadi kesalahan pada server' });
+    }
+}));
+// Login Route (Mobile App / Anggota)
+router.post('/login-mobile', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { nip, password, fcmToken } = req.body;
+    try {
+        const anggota = yield prisma.anggota.findUnique({ where: { nip } });
+        if (!anggota) {
+            return res.status(401).json({ error: 'NIP tidak terdaftar' });
+        }
+        // Check if password exists (some members might not be activated yet)
+        if (!anggota.password) {
+            return res.status(403).json({ error: 'Akun belum diaktifkan. Silakan hubungi admin.' });
+        }
+        const isPasswordValid = yield bcrypt_1.default.compare(password, anggota.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Password salah' });
+        }
+        if (anggota.status !== 'AKTIF') {
+            return res.status(403).json({ error: `Akun anda ${anggota.status}. Tidak dapat login.` });
+        }
+        // Update FCM token if provided
+        if (fcmToken) {
+            yield prisma.anggota.update({
+                where: { id: anggota.id },
+                data: { fcmToken }
+            });
+        }
+        const token = jsonwebtoken_1.default.sign({ id: anggota.id, role: 'ANGGOTA', nip: anggota.nip }, JWT_SECRET, { expiresIn: '30d' } // Mobile app usually has longer sessions
+        );
+        return res.json({ message: 'Login berhasil', token, user: anggota });
+    }
+    catch (error) {
+        console.error('Mobile Login error:', error);
         res.status(500).json({ error: 'Terjadi kesalahan pada server' });
     }
 }));

@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User / Admin
+// User / Admin (Pengurus & Pengawas)
 model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
@@ -16,22 +16,25 @@ model User {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  auditTrails AuditTrail[]
 }
 
 enum Role {
   SUPERADMIN
   ADMIN
   BENDAHARA
+  PENGAWAS
 }
 
 // Anggota
 model Anggota {
-  id           Int      @id @default(autoincrement())
-  nip          String?  @unique
+  id           Int       @id @default(autoincrement())
+  nip          String?   @unique
   namaLengkap  String
   pangkat      String?
   unitKerja    String?
-  email        String?  @unique
+  email        String?   @unique
   noHp         String?
   tempatLahir  String?
   tanggalLahir DateTime?
@@ -39,91 +42,174 @@ model Anggota {
   noKtp        String?
   alamatRumah  String?
   noRekening   String?
-  fcSkStatus   String?  @default("belum") // "sudah" atau "belum"
-  
-  fcSkUrl      String?
+  fcSkStatus   String?   @default("belum")
+
+  fcSkUrl       String?
   fotoProfilUrl String?
-  status       StatusAnggota @default(AKTIF)
-  password     String? // Password untuk aplikasi mobile anggota
-  
-  simpanan     Simpanan[]
-  pinjaman     Pinjaman[]
-  transaksi    Transaksi[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status        StatusAnggota @default(AKTIF)
+  password      String? // Password / PIN untuk mobile
+  fcmToken      String? // Untuk push notification
+
+  simpanan          Simpanan[]
+  mutasiSimpanan    MutasiSimpanan[]
+  penarikanSimpanan PenarikanSimpanan[]
+  pinjaman          Pinjaman[]
+  transaksi         Transaksi[]
+  riwayatSHU        RiwayatSHU[]
+  tagihanPaylater   TagihanPaylater[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum StatusAnggota {
   AKTIF
   NONAKTIF
   MENUNGGU_PERSETUJUAN
+  KELUAR
 }
 
-// Simpanan
+// Simpanan (Induk Tabungan)
 model Simpanan {
-  id           Int      @id @default(autoincrement())
-  anggotaId    Int
-  anggota      Anggota  @relation(fields: [anggotaId], references: [id])
-  jenisSimpanan String
-  kodeAkun     String?
-  kodeInvoice  String?  @unique
-  buktiUrl     String?
-  status       StatusSimpanan @default(MENUNGGU_PERSETUJUAN)
-  saldo        Float    @default(0)
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int           @id @default(autoincrement())
+  anggotaId     Int
+  anggota       Anggota       @relation(fields: [anggotaId], references: [id])
+  jenisSimpanan JenisSimpanan
+  saldo         Float         @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-enum StatusSimpanan {
-  MENUNGGU_PERSETUJUAN
+enum JenisSimpanan {
+  POKOK
+  WAJIB
+  SUKARELA
+}
+
+// Mutasi Simpanan (Buku Tabungan / Rekening Koran)
+model MutasiSimpanan {
+  id               Int           @id @default(autoincrement())
+  anggotaId        Int
+  anggota          Anggota       @relation(fields: [anggotaId], references: [id])
+  jenisSimpanan    JenisSimpanan
+  jenisMutasi      JenisMutasi
+  nominal          Float
+  keterangan       String?
+  buktiUrl         String?
+  status           StatusMutasi  @default(MENUNGGU_VERIFIKASI)
+  isDivalidasiBank Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum JenisMutasi {
+  SETORAN
+  PENARIKAN
+}
+
+enum StatusMutasi {
+  MENUNGGU_VERIFIKASI
   DISETUJUI
+  DITOLAK
+}
+
+// Penarikan Simpanan Sukarela
+model PenarikanSimpanan {
+  id               Int             @id @default(autoincrement())
+  anggotaId        Int
+  anggota          Anggota         @relation(fields: [anggotaId], references: [id])
+  nominal          Float
+  bankTujuan       String?
+  rekeningTujuan   String?
+  status           StatusPenarikan @default(MENUNGGU_PERSETUJUAN)
+  buktiTransferUrl String? // Bukti admin sudah transfer ke anggota
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum StatusPenarikan {
+  MENUNGGU_PERSETUJUAN
+  DIPROSES
+  SELESAI
   DITOLAK
 }
 
 // Pinjaman
 model Pinjaman {
-  id             Int      @id @default(autoincrement())
-  anggotaId      Int
-  anggota        Anggota  @relation(fields: [anggotaId], references: [id])
-  nominal        Float
-  tenor          Int      // Dalam bulan
-  bungaPersen    Float    @default(1.0)
+  id          Int        @id @default(autoincrement())
+  anggotaId   Int
+  anggota     Anggota    @relation(fields: [anggotaId], references: [id])
+  nominal     Float
+  tenor       Int // Dalam bulan
+  bungaPersen Float      @default(1.0)
+  skemaBunga  SkemaBunga @default(FLAT)
+
+  biayaAdmin    Float @default(0)
+  biayaAsuransi Float @default(0)
+  nominalCair   Float @default(0) // nominal - biayaAdmin - biayaAsuransi
+
+  plafonMaksimal Float? // Rekam jejak batas plafon saat diajukan
+
   status         StatusPinjaman @default(PENDING_ADMIN)
-  fileKtpUrl     String?
+  kolektibilitas Kolektibilitas @default(LANCAR)
+
+  fileKtpUrl      String?
   fileSlipGajiUrl String?
-  
-  tanggalCair    DateTime?
-  
-  angsuran       Angsuran[]
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+
+  tanggalCair DateTime?
+
+  angsuran Angsuran[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum SkemaBunga {
+  FLAT
+  MENURUN
 }
 
 enum StatusPinjaman {
   PENDING_ADMIN
   PENDING_BENDAHARA
+  PENDING_KETUA
   DICAIRKAN
   LUNAS
   DITOLAK
+  DIRESTRUKTURISASI
+}
+
+enum Kolektibilitas {
+  LANCAR
+  DPK // Dalam Perhatian Khusus
+  KURANG_LANCAR
+  DIRAGUKAN
+  MACET
 }
 
 // Angsuran
 model Angsuran {
-  id             Int      @id @default(autoincrement())
-  pinjamanId     Int
-  pinjaman       Pinjaman @relation(fields: [pinjamanId], references: [id])
-  nominal        Float
-  jatuhTempo     DateTime
-  status         StatusAngsuran @default(BELUM_BAYAR)
+  id                 Int            @id @default(autoincrement())
+  pinjamanId         Int
+  pinjaman           Pinjaman       @relation(fields: [pinjamanId], references: [id])
+  bulanKe            Int
+  nominalPokok       Float
+  nominalBunga       Float
+  dendaKeterlambatan Float          @default(0)
+  totalTagihan       Float
+  jatuhTempo         DateTime
+  status             StatusAngsuran @default(BELUM_BAYAR)
+
   lampiranBuktiUrl String?
-  
-  tanggalBayar   DateTime?
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isDivalidasiBank Boolean @default(false)
+
+  tanggalBayar DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum StatusAngsuran {
@@ -132,53 +218,122 @@ enum StatusAngsuran {
   LUNAS
 }
 
-// Transaksi (Pemasukan / Pengeluaran Umum Koperasi)
+// Kas Koperasi (Double-Entry Bookkeeping - Buku Besar)
+model KasKoperasi {
+  id               Int      @id @default(autoincrement())
+  saldo            Float    @default(0)
+  terakhirDiupdate DateTime @updatedAt
+}
+
+// Jurnal Umum (Audit Kas)
+model JurnalUmum {
+  id              Int            @id @default(autoincrement())
+  tanggal         DateTime       @default(now())
+  keterangan      String
+  jenis           JenisTransaksi
+  nominal         Float
+  saldoSetelahnya Float
+  referensiId     String? // ID transaksi terkait (Misal ID Pinjaman, Mutasi)
+  tipeReferensi   String? // 'PINJAMAN', 'SIMPANAN', 'ORDER', dsb
+
+  createdAt DateTime @default(now())
+}
+
+// Transaksi Umum (Lain-lain)
 model Transaksi {
-  id             Int      @id @default(autoincrement())
-  anggotaId      Int?
-  anggota        Anggota? @relation(fields: [anggotaId], references: [id])
-  jenisTransaksi JenisTransaksi
-  kategori       String
-  nominal        Float
-  keterangan     String?
+  id               Int            @id @default(autoincrement())
+  anggotaId        Int?
+  anggota          Anggota?       @relation(fields: [anggotaId], references: [id])
+  jenisTransaksi   JenisTransaksi
+  kategori         String
+  nominal          Float
+  keterangan       String?
   lampiranBuktiUrl String?
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum JenisTransaksi {
-  PEMASUKAN
-  PENGELUARAN
+  DEBIT // Pemasukan
+  KREDIT // Pengeluaran
 }
 
-// Produk (Toko Koperasi)
+// Sisa Hasil Usaha (SHU)
+model PeriodeSHU {
+  id            Int   @id @default(autoincrement())
+  tahun         Int   @unique
+  totalSHUKotor Float
+
+  persenCadangan    Float
+  persenPengurus    Float
+  persenPendidikan  Float
+  persenJasaModal   Float
+  persenJasaAnggota Float
+
+  status     StatusSHU    @default(DRAFT)
+  riwayatSHU RiwayatSHU[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum StatusSHU {
+  DRAFT
+  DISETUJUI
+  DIBAGIKAN
+}
+
+model RiwayatSHU {
+  id        Int        @id @default(autoincrement())
+  periodeId Int
+  periode   PeriodeSHU @relation(fields: [periodeId], references: [id])
+  anggotaId Int
+  anggota   Anggota    @relation(fields: [anggotaId], references: [id])
+
+  nominalJasaModal   Float
+  nominalJasaAnggota Float
+  totalSHU           Float
+
+  statusPencairan StatusPencairanSHU @default(DITAHAN_DI_SIMPANAN)
+
+  createdAt DateTime @default(now())
+}
+
+enum StatusPencairanSHU {
+  DITAHAN_DI_SIMPANAN // Masuk jadi simpanan sukarela
+  DICAIRKAN_TUNAI
+  DIPOTONG_TUNGGAKAN
+}
+
+// Toko Koperasi (Point of Sales)
 model Produk {
-  id             Int      @id @default(autoincrement())
-  nama           String
-  kategori       String
-  hargaJual      Float
-  hargaModal     Float
-  stok           Int
-  gambarUrl      String?
-  
-  orderItems     OrderItem[]
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id         Int     @id @default(autoincrement())
+  nama       String
+  kategori   String
+  hargaJual  Float
+  hargaModal Float
+  stok       Int
+  gambarUrl  String?
+
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// Order (Penjualan / POS)
 model Order {
-  id             Int      @id @default(autoincrement())
-  totalHarga     Float
+  id               Int              @id @default(autoincrement())
+  totalHarga       Float
   metodePembayaran MetodePembayaran @default(CASH)
-  status         StatusOrder @default(SELESAI)
-  
-  items          OrderItem[]
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status           StatusOrder      @default(SELESAI)
+
+  tagihanPaylater TagihanPaylater?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum MetodePembayaran {
@@ -195,32 +350,64 @@ enum StatusOrder {
 }
 
 model OrderItem {
-  id             Int      @id @default(autoincrement())
-  orderId        Int
-  order          Order    @relation(fields: [orderId], references: [id])
-  produkId       Int
-  produk         Produk   @relation(fields: [produkId], references: [id])
-  jumlah         Int
-  hargaSatuan    Float
+  id          Int    @id @default(autoincrement())
+  orderId     Int
+  order       Order  @relation(fields: [orderId], references: [id])
+  produkId    Int
+  produk      Produk @relation(fields: [produkId], references: [id])
+  jumlah      Int
+  hargaSatuan Float
+}
+
+// Kasbon / Paylater Toko
+model TagihanPaylater {
+  id           Int            @id @default(autoincrement())
+  orderId      Int            @unique
+  order        Order          @relation(fields: [orderId], references: [id])
+  anggotaId    Int
+  anggota      Anggota        @relation(fields: [anggotaId], references: [id])
+  nominal      Float
+  status       StatusAngsuran @default(BELUM_BAYAR)
+  jatuhTempo   DateTime
+  tanggalBayar DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Chat (Live Chat)
 model Chat {
-  id             Int      @id @default(autoincrement())
-  pengirimId     String   // Bisa "admin" atau ID anggota
-  penerimaId     String   // Bisa "admin" atau ID anggota
-  pesan          String
-  isRead         Boolean  @default(false)
-  
-  createdAt      DateTime @default(now())
+  id         Int     @id @default(autoincrement())
+  pengirimId String // Bisa "admin" atau ID anggota
+  penerimaId String // Bisa "admin" atau ID anggota
+  pesan      String
+  isRead     Boolean @default(false)
+
+  createdAt DateTime @default(now())
 }
 
-// Pengaturan Umum (Data Master Pangkat, Unit Kerja, dll)
+// Pengaturan Umum & Parameter (Master Data)
 model PengaturanUmum {
-  id             Int      @id @default(autoincrement())
-  kategori       String   // e.g., 'PANGKAT', 'UNIT_KERJA'
-  nilai          String   // e.g., 'Golongan II/A', 'Dinas Pendidikan'
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id       Int    @id @default(autoincrement())
+  kategori String // e.g., 'PANGKAT', 'UNIT_KERJA', 'LIMIT_PINJAMAN'
+  nilai    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Audit Trail (Tata Kelola / Governance)
+model AuditTrail {
+  id         Int     @id @default(autoincrement())
+  userId     Int?
+  user       User?   @relation(fields: [userId], references: [id])
+  action     String // e.g., 'APPROVE_PINJAMAN', 'UPDATE_ANGGOTA'
+  entityName String // e.g., 'Pinjaman', 'Anggota'
+  entityId   String
+  oldData    String? // JSON string
+  newData    String? // JSON string
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
 }

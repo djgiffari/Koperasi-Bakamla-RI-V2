@@ -27,113 +27,162 @@ const storage = multer_1.default.diskStorage({
     }
 });
 const upload = (0, multer_1.default)({ storage: storage });
-// GET all simpanan
-router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// GET all balances (Simpanan Induk)
+router.get('/saldo/:anggotaId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const anggotaId = parseInt(req.params.anggotaId);
         const simpanan = yield prisma_1.default.simpanan.findMany({
+            where: { anggotaId }
+        });
+        res.json(simpanan);
+    }
+    catch (error) {
+        console.error('Error fetching saldo simpanan:', error);
+        res.status(500).json({ error: 'Gagal mengambil data saldo simpanan' });
+    }
+}));
+// GET mutasi simpanan
+router.get('/mutasi', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const mutasi = yield prisma_1.default.mutasiSimpanan.findMany({
             include: {
                 anggota: true
             },
             orderBy: { createdAt: 'desc' }
         });
-        res.json(simpanan);
+        res.json(mutasi);
     }
     catch (error) {
-        console.error('Error fetching simpanan:', error);
-        res.status(500).json({ error: 'Gagal mengambil data simpanan' });
+        console.error('Error fetching mutasi:', error);
+        res.status(500).json({ error: 'Gagal mengambil data mutasi simpanan' });
     }
 }));
-// Helper to generate Invoice Code
-function generateInvoiceCode() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const date = new Date();
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const prefix = `SA-${yyyy}${mm}-`;
-        const lastSimpanan = yield prisma_1.default.simpanan.findFirst({
-            where: {
-                kodeInvoice: {
-                    startsWith: prefix
-                }
-            },
-            orderBy: {
-                id: 'desc'
-            }
-        });
-        let seq = 1;
-        if (lastSimpanan && lastSimpanan.kodeInvoice) {
-            const lastSeqStr = lastSimpanan.kodeInvoice.replace(prefix, '');
-            const lastSeq = parseInt(lastSeqStr, 10);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-        const seqStr = String(seq).padStart(3, '0');
-        return `${prefix}${seqStr}`;
-    });
-}
-// POST new simpanan
-router.post('/', upload.single('buktiFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// POST setor simpanan (Create Mutasi SETORAN)
+router.post('/setor', upload.single('buktiFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { anggotaId, jenisSimpanan, saldo, kodeAkun, tanggal } = req.body;
+        const { anggotaId, jenisSimpanan, nominal, keterangan } = req.body;
+        if (!['POKOK', 'WAJIB', 'SUKARELA'].includes(jenisSimpanan)) {
+            return res.status(400).json({ error: 'Jenis simpanan tidak valid' });
+        }
         let buktiUrl = null;
         if (req.file) {
             buktiUrl = `/uploads/${req.file.filename}`;
         }
-        const kodeInvoice = yield generateInvoiceCode();
-        const newSimpanan = yield prisma_1.default.simpanan.create({
+        const newMutasi = yield prisma_1.default.mutasiSimpanan.create({
             data: {
                 anggotaId: parseInt(anggotaId),
                 jenisSimpanan: jenisSimpanan,
-                saldo: parseFloat(saldo),
-                kodeAkun: kodeAkun || null,
-                kodeInvoice: kodeInvoice,
+                jenisMutasi: 'SETORAN',
+                nominal: parseFloat(nominal),
+                keterangan: keterangan || null,
                 buktiUrl: buktiUrl,
-                status: 'MENUNGGU_PERSETUJUAN',
-                createdAt: tanggal ? new Date(tanggal) : new Date()
-            },
-            include: {
-                anggota: true
+                status: 'MENUNGGU_VERIFIKASI',
+                isDivalidasiBank: false
             }
         });
-        res.status(201).json(newSimpanan);
+        res.status(201).json({ message: 'Setoran berhasil dicatat dan menunggu verifikasi', data: newMutasi });
     }
     catch (error) {
-        console.error('Error creating simpanan:', error);
-        res.status(500).json({ error: 'Gagal menambahkan data simpanan' });
+        console.error('Error creating setoran:', error);
+        res.status(500).json({ error: 'Gagal menambahkan setoran simpanan' });
     }
 }));
-// PUT update simpanan status
-router.put('/:id/status', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// PUT verifikasi mutasi oleh bendahara
+router.put('/mutasi/:id/verifikasi', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const id = parseInt(req.params.id);
-        const { status } = req.body;
-        if (!['MENUNGGU_PERSETUJUAN', 'DISETUJUI', 'DITOLAK'].includes(status)) {
+        const { status, isDivalidasiBank } = req.body;
+        if (!['MENUNGGU_VERIFIKASI', 'DISETUJUI', 'DITOLAK'].includes(status)) {
             return res.status(400).json({ error: 'Status tidak valid' });
         }
-        const updatedSimpanan = yield prisma_1.default.simpanan.update({
-            where: { id },
-            data: { status }
-        });
-        res.json(updatedSimpanan);
+        // Transaction to ensure balance is updated if approved
+        const updatedMutasi = yield prisma_1.default.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+            const mutasi = yield tx.mutasiSimpanan.findUnique({ where: { id } });
+            if (!mutasi)
+                throw new Error('Mutasi tidak ditemukan');
+            if (mutasi.status === 'DISETUJUI')
+                throw new Error('Mutasi sudah pernah disetujui');
+            const updated = yield tx.mutasiSimpanan.update({
+                where: { id },
+                data: {
+                    status,
+                    isDivalidasiBank: isDivalidasiBank !== undefined ? isDivalidasiBank : mutasi.isDivalidasiBank
+                }
+            });
+            if (status === 'DISETUJUI') {
+                // Cari induk simpanan
+                let simpananInduk = yield tx.simpanan.findFirst({
+                    where: { anggotaId: mutasi.anggotaId, jenisSimpanan: mutasi.jenisSimpanan }
+                });
+                // Jika belum ada, buat baru
+                if (!simpananInduk) {
+                    simpananInduk = yield tx.simpanan.create({
+                        data: {
+                            anggotaId: mutasi.anggotaId,
+                            jenisSimpanan: mutasi.jenisSimpanan,
+                            saldo: 0
+                        }
+                    });
+                }
+                // Update saldo
+                const saldoBaru = mutasi.jenisMutasi === 'SETORAN'
+                    ? simpananInduk.saldo + mutasi.nominal
+                    : simpananInduk.saldo - mutasi.nominal;
+                yield tx.simpanan.update({
+                    where: { id: simpananInduk.id },
+                    data: { saldo: saldoBaru }
+                });
+                // Catat ke Jurnal / Kas Koperasi
+                const kas = yield tx.kasKoperasi.findFirst();
+                if (kas) {
+                    const saldoKasBaru = mutasi.jenisMutasi === 'SETORAN' ? kas.saldo + mutasi.nominal : kas.saldo - mutasi.nominal;
+                    yield tx.kasKoperasi.update({ where: { id: kas.id }, data: { saldo: saldoKasBaru } });
+                    yield tx.jurnalUmum.create({
+                        data: {
+                            keterangan: `Verifikasi ${mutasi.jenisMutasi} Simpanan ${mutasi.jenisSimpanan} - Anggota ${mutasi.anggotaId}`,
+                            jenis: mutasi.jenisMutasi === 'SETORAN' ? 'DEBIT' : 'KREDIT',
+                            nominal: mutasi.nominal,
+                            saldoSetelahnya: saldoKasBaru,
+                            referensiId: String(mutasi.id),
+                            tipeReferensi: 'SIMPANAN'
+                        }
+                    });
+                }
+            }
+            return updated;
+        }));
+        res.json({ message: 'Status mutasi berhasil diupdate', data: updatedMutasi });
     }
     catch (error) {
         console.error('Error updating status:', error);
-        res.status(500).json({ error: 'Gagal mengubah status' });
+        res.status(500).json({ error: error.message || 'Gagal mengubah status mutasi' });
     }
 }));
-// DELETE simpanan
-router.delete('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// POST penarikan simpanan sukarela
+router.post('/tarik', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const id = parseInt(req.params.id);
-        yield prisma_1.default.simpanan.delete({
-            where: { id }
+        const { anggotaId, nominal, bankTujuan, rekeningTujuan } = req.body;
+        // Cek saldo sukarela
+        const simpananSukarela = yield prisma_1.default.simpanan.findFirst({
+            where: { anggotaId: parseInt(anggotaId), jenisSimpanan: 'SUKARELA' }
         });
-        res.json({ message: 'Simpanan berhasil dihapus' });
+        if (!simpananSukarela || simpananSukarela.saldo < parseFloat(nominal)) {
+            return res.status(400).json({ error: 'Saldo simpanan sukarela tidak mencukupi' });
+        }
+        const penarikan = yield prisma_1.default.penarikanSimpanan.create({
+            data: {
+                anggotaId: parseInt(anggotaId),
+                nominal: parseFloat(nominal),
+                bankTujuan,
+                rekeningTujuan,
+                status: 'MENUNGGU_PERSETUJUAN'
+            }
+        });
+        res.status(201).json({ message: 'Pengajuan penarikan berhasil, menunggu proses pencairan', data: penarikan });
     }
     catch (error) {
-        console.error('Error deleting simpanan:', error);
-        res.status(500).json({ error: 'Gagal menghapus data simpanan' });
+        console.error('Error pengajuan penarikan:', error);
+        res.status(500).json({ error: 'Gagal mengajukan penarikan' });
     }
 }));
 exports.default = router;

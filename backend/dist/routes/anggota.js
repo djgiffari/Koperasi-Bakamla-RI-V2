@@ -16,6 +16,7 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const router = (0, express_1.Router)();
 // Configure multer storage
 const storage = multer_1.default.diskStorage({
@@ -41,13 +42,17 @@ router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.status(500).json({ error: 'Gagal mengambil data anggota' });
     }
 }));
-// POST new anggota
+// POST new anggota (Admin side)
 router.post('/', upload.single('fcSkFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { namaLengkap, nip, pangkat, unitKerja, tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus } = req.body;
+        const { namaLengkap, nip, pangkat, unitKerja, tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus, password } = req.body;
         let fcSkUrl = null;
         if (req.file) {
             fcSkUrl = `/uploads/${req.file.filename}`;
+        }
+        let hashedPassword = null;
+        if (password) {
+            hashedPassword = yield bcrypt_1.default.hash(password, 10);
         }
         const newAnggota = yield prisma_1.default.anggota.create({
             data: {
@@ -62,7 +67,9 @@ router.post('/', upload.single('fcSkFile'), (req, res) => __awaiter(void 0, void
                 alamatRumah,
                 noRekening,
                 fcSkStatus: fcSkStatus || 'belum',
-                fcSkUrl
+                fcSkUrl,
+                password: hashedPassword,
+                status: 'AKTIF'
             }
         });
         res.status(201).json(newAnggota);
@@ -70,6 +77,39 @@ router.post('/', upload.single('fcSkFile'), (req, res) => __awaiter(void 0, void
     catch (error) {
         console.error('Error creating anggota:', error);
         res.status(500).json({ error: 'Gagal menambahkan data anggota' });
+    }
+}));
+// POST register (Mobile Self-Registration)
+router.post('/register', upload.single('ktpFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { namaLengkap, nip, password, noKtp, unitKerja, noHp } = req.body;
+        // Check if NIP already exists
+        const existing = yield prisma_1.default.anggota.findUnique({ where: { nip } });
+        if (existing) {
+            return res.status(400).json({ error: 'NIP sudah terdaftar.' });
+        }
+        let ktpUrl = null;
+        if (req.file) {
+            ktpUrl = `/uploads/${req.file.filename}`;
+        }
+        const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+        const newAnggota = yield prisma_1.default.anggota.create({
+            data: {
+                namaLengkap,
+                nip,
+                password: hashedPassword,
+                noKtp,
+                unitKerja,
+                noHp,
+                fcSkUrl: ktpUrl, // using fcSkUrl field to store ID/KTP for now
+                status: 'MENUNGGU_PERSETUJUAN' // Requires admin approval
+            }
+        });
+        res.status(201).json({ message: 'Registrasi berhasil, menunggu persetujuan admin', data: newAnggota });
+    }
+    catch (error) {
+        console.error('Error registering mobile anggota:', error);
+        res.status(500).json({ error: 'Gagal mendaftar keanggotaan' });
     }
 }));
 // PUT update anggota

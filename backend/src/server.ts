@@ -4,6 +4,11 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+
+// Routes
 import authRoutes from './routes/auth';
 import anggotaRoutes from './routes/anggota';
 import simpananRoutes from './routes/simpanan';
@@ -11,12 +16,25 @@ import pinjamanRoutes from './routes/pinjaman';
 import angsuranRoutes from './routes/angsuran';
 import dashboardRoutes from './routes/dashboard';
 import pengaturanRoutes from './routes/pengaturan';
-import fs from 'fs';
+import tokoRoutes from './routes/toko';
+import shuRoutes from './routes/shu';
+import chatRoutes from './routes/chat';
+
+import prisma from './utils/prisma';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Create HTTP Server and bind Socket.io
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 
 // Middleware
 app.use(express.json());
@@ -31,7 +49,7 @@ if (!fs.existsSync(uploadDir)) {
 }
 app.use('/uploads', express.static(uploadDir));
 
-// Routes
+// Rest API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/anggota', anggotaRoutes);
 app.use('/api/simpanan', simpananRoutes);
@@ -39,6 +57,9 @@ app.use('/api/pinjaman', pinjamanRoutes);
 app.use('/api/angsuran', angsuranRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/pengaturan', pengaturanRoutes);
+app.use('/api/toko', tokoRoutes);
+app.use('/api/shu', shuRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -51,6 +72,44 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
 });
 
-app.listen(PORT, () => {
+// Socket.io Implementation
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // User bergabung ke room pribadi mereka menggunakan ID mereka sendiri
+  // Admin bisa mendengarkan room tertentu atau broadcasting.
+  socket.on('join', (userId: string) => {
+    socket.join(userId);
+    console.log(`User ${userId} joined their personal room`);
+  });
+
+  socket.on('send_message', async (data: { pengirimId: string, penerimaId: string, pesan: string }) => {
+    try {
+      // 1. Simpan ke database
+      const chat = await prisma.chat.create({
+        data: {
+          pengirimId: data.pengirimId,
+          penerimaId: data.penerimaId,
+          pesan: data.pesan,
+          isRead: false
+        }
+      });
+
+      // 2. Kirim pesan secara realtime ke penerima
+      io.to(data.penerimaId).emit('receive_message', chat);
+      
+      // 3. Kirim kembali ke pengirim (untuk update UI jika multi-device)
+      socket.emit('message_sent', chat);
+    } catch (error) {
+      console.error('Socket send_message error:', error);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

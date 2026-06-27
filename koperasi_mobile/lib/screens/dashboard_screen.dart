@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import '../theme/colors.dart';
 import 'dart:ui';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import 'menu_screens.dart';
+import '../config.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final int? anggotaId;
+  final String? namaLengkap;
+  
+  const DashboardScreen({
+    super.key,
+    this.anggotaId,
+    this.namaLengkap,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -15,6 +27,74 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   bool _isBalanceHidden = false;
+  String _estimasiSHU = "Memuat...";
+  String _totalSimpanan = "Memuat...";
+  String _sisaPinjaman = "Memuat...";
+  
+  String get _namaPanggilan {
+    if (widget.namaLengkap == null) return 'Anggota Koperasi';
+    return widget.namaLengkap!.split(' ').first;
+  }
+  
+  String get _inisial {
+    if (widget.namaLengkap == null) return 'AG';
+    final parts = widget.namaLengkap!.split(' ');
+    if (parts.length > 1) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return widget.namaLengkap!.substring(0, 2).toUpperCase();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    final aId = widget.anggotaId ?? 1; // fallback ke 1 jika null untuk testing
+    
+    try {
+      // 1. Fetch Estimasi SHU
+      final resShu = await http.get(Uri.parse('${ApiConfig.baseUrl}/shu/estimasi/$aId'));
+      if (resShu.statusCode == 200) {
+        final data = jsonDecode(resShu.body);
+        final nominal = data['estimasiTotalShu'] as num;
+        if (mounted) setState(() => _estimasiSHU = "Rp ${nominal.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}");
+      } else {
+        if (mounted) setState(() => _estimasiSHU = "Rp 0");
+      }
+      
+      // 2. Fetch Mobile Dashboard Data (Simpanan & Pinjaman)
+      final resDash = await http.get(Uri.parse('${ApiConfig.baseUrl}/dashboard/mobile/$aId'));
+      if (resDash.statusCode == 200) {
+        final data = jsonDecode(resDash.body);
+        final simpanan = data['totalSimpanan'] as num;
+        final pinjaman = data['sisaPinjaman'] as num;
+        
+        if (mounted) {
+          setState(() {
+            _totalSimpanan = "Rp ${simpanan.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}";
+            _sisaPinjaman = "Rp ${pinjaman.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}";
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _totalSimpanan = "Rp 0";
+            _sisaPinjaman = "Rp 0";
+          });
+        }
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _estimasiSHU = "Gagal memuat";
+          _totalSimpanan = "Gagal memuat";
+          _sisaPinjaman = "Gagal memuat";
+        });
+      }
+    }
+  }
 
   final List<String> promoImages = [
     'https://via.placeholder.com/600x250/0B1E36/FFFFFF?text=Promo+Sembako+Murah',
@@ -58,12 +138,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Row(
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.primaryLight,
               child: Text(
-                'AG',
-                style: TextStyle(
+                _inisial,
+                style: const TextStyle(
                   color: AppColors.white,
                   fontWeight: FontWeight.bold,
                 ),
@@ -73,7 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Halo,',
                   style: TextStyle(
                     color: AppColors.textMuted,
@@ -81,7 +161,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 Text(
-                  'Anggota Koperasi',
+                  _namaPanggilan,
                   style: GoogleFonts.outfit(
                     color: AppColors.primary,
                     fontSize: 18,
@@ -186,7 +266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _isBalanceHidden ? 'Rp •••••••' : 'Rp 15.450.000',
+                      _isBalanceHidden ? 'Rp •••••••' : _totalSimpanan,
                       style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 32,
@@ -222,7 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _isBalanceHidden ? 'Rp •••••••' : 'Rp 4.200.000',
+                                _isBalanceHidden ? 'Rp •••••••' : _sisaPinjaman,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
@@ -275,20 +355,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _actionButton(icon: LucideIcons.wallet, label: 'Ajukan\nPinjaman', color: Colors.blue),
-            _actionButton(icon: LucideIcons.piggyBank, label: 'Setor\nSimpanan', color: Colors.green),
-            _actionButton(icon: LucideIcons.creditCard, label: 'Bayar\nAngsuran', color: Colors.orange),
-            _actionButton(icon: LucideIcons.shoppingBag, label: 'Toko\nKoperasi', color: AppColors.secondary),
+            _actionButton(
+              icon: LucideIcons.wallet,
+              label: 'Ajukan\nPinjaman',
+              color: Colors.blue,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PinjamanScreen())),
+            ),
+            _actionButton(
+              icon: LucideIcons.piggyBank,
+              label: 'Setor\nSimpanan',
+              color: Colors.green,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SimpananScreen())),
+            ),
+            _actionButton(
+              icon: LucideIcons.creditCard,
+              label: 'Bayar\nAngsuran',
+              color: Colors.orange,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AngsuranScreen())),
+            ),
+            _actionButton(
+              icon: LucideIcons.shoppingBag,
+              label: 'Toko\nKoperasi',
+              color: AppColors.secondary,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TokoScreen())),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _actionButton({required IconData icon, required String label, required Color color}) {
-    return Column(
-      children: [
-        Container(
+  Widget _actionButton({required IconData icon, required String label, required Color color, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
           width: 60,
           height: 60,
           decoration: BoxDecoration(
@@ -301,21 +403,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 offset: const Offset(0, 4),
               ),
             ],
-            border: Border.all(color: Colors.black.withOpacity(0.02)),
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(color: Colors.black.withOpacity(0.02)),
+            ),
+            child: Icon(icon, color: color, size: 28),
           ),
-          child: Icon(icon, color: color, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textMain,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMain,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -361,7 +476,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Rp 1.250.000',
+                    _estimasiSHU,
                     style: GoogleFonts.outfit(
                       color: AppColors.primary,
                       fontSize: 18,

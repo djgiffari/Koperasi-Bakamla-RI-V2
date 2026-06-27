@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import multer from 'multer';
 import path from 'path';
+import bcrypt from 'bcrypt';
 
 const router = Router();
 
@@ -30,12 +31,12 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST new anggota
-router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response) => {
+// POST new anggota (Admin side)
+router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response): Promise<any> => {
   try {
     const { 
       namaLengkap, nip, pangkat, unitKerja, 
-      tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus 
+      tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus, password 
     } = req.body;
     
     let fcSkUrl = null;
@@ -43,6 +44,11 @@ router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response) 
       fcSkUrl = `/uploads/${req.file.filename}`;
     }
     
+    let hashedPassword = null;
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+
     const newAnggota = await prisma.anggota.create({
       data: {
         namaLengkap,
@@ -56,7 +62,9 @@ router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response) 
         alamatRumah,
         noRekening,
         fcSkStatus: fcSkStatus || 'belum',
-        fcSkUrl
+        fcSkUrl,
+        password: hashedPassword,
+        status: 'AKTIF'
       }
     });
     
@@ -64,6 +72,46 @@ router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response) 
   } catch (error) {
     console.error('Error creating anggota:', error);
     res.status(500).json({ error: 'Gagal menambahkan data anggota' });
+  }
+});
+
+// POST register (Mobile Self-Registration)
+router.post('/register', upload.single('ktpFile'), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { 
+      namaLengkap, nip, password, noKtp, unitKerja, noHp
+    } = req.body;
+    
+    // Check if NIP already exists
+    const existing = await prisma.anggota.findUnique({ where: { nip } });
+    if (existing) {
+      return res.status(400).json({ error: 'NIP sudah terdaftar.' });
+    }
+
+    let ktpUrl = null;
+    if (req.file) {
+      ktpUrl = `/uploads/${req.file.filename}`;
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newAnggota = await prisma.anggota.create({
+      data: {
+        namaLengkap,
+        nip,
+        password: hashedPassword,
+        noKtp,
+        unitKerja,
+        noHp,
+        fcSkUrl: ktpUrl, // using fcSkUrl field to store ID/KTP for now
+        status: 'MENUNGGU_PERSETUJUAN' // Requires admin approval
+      }
+    });
+    
+    res.status(201).json({ message: 'Registrasi berhasil, menunggu persetujuan admin', data: newAnggota });
+  } catch (error) {
+    console.error('Error registering mobile anggota:', error);
+    res.status(500).json({ error: 'Gagal mendaftar keanggotaan' });
   }
 });
 
