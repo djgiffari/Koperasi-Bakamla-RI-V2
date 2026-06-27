@@ -1,17 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Search, Edit2, Trash2, Plus, Upload, Download, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
-
-// Dummy Data berdasarkan struktur V2
-const initialAnggota = [
-  { id: 'ANG-001', nama_lengkap: 'Budi Santoso', nip_nrp: '198501012010121001', pangkat: 'Letkol (Bakamla)', satuan_kerja: 'Biro Umum', nomor_rekening: '0987654321', nama_bank: 'BNI', fc_sk: 'sudah' },
-  { id: 'ANG-002', nama_lengkap: 'Siti Aminah', nip_nrp: '199002022015032002', pangkat: 'Mayor (Bakamla)', satuan_kerja: 'Direktorat Operasi Laut', nomor_rekening: '1122334455', nama_bank: 'BNI', fc_sk: 'belum' },
-];
+import { api } from '../lib/api';
 
 const Anggota: React.FC = () => {
-  const [anggotaList, setAnggotaList] = useState(initialAnggota);
+  const [anggotaList, setAnggotaList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Drawer State
@@ -27,6 +23,24 @@ const Anggota: React.FC = () => {
     nama_lengkap: '', nip_nrp: '', pangkat: '', satuan_kerja: '', nomor_rekening: '', nama_bank: 'BNI', fc_sk: 'belum' 
   });
 
+  // Fetch data
+  const fetchAnggota = async () => {
+    setIsLoading(true);
+    try {
+      const data = await api.get('/anggota');
+      setAnggotaList(data);
+    } catch (error) {
+      console.error('Error fetching anggota:', error);
+      alert('Gagal mengambil data anggota.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnggota();
+  }, []);
+
   // Handlers
   const handleOpenAdd = () => {
     setEditingId(null);
@@ -37,9 +51,9 @@ const Anggota: React.FC = () => {
   const handleOpenEdit = (anggota: any) => {
     setEditingId(anggota.id);
     setFormData({ 
-      nama_lengkap: anggota.nama_lengkap, nip_nrp: anggota.nip_nrp, pangkat: anggota.pangkat, 
-      satuan_kerja: anggota.satuan_kerja, nomor_rekening: anggota.nomor_rekening, 
-      nama_bank: anggota.nama_bank || 'BNI', fc_sk: anggota.fc_sk 
+      nama_lengkap: anggota.namaLengkap, nip_nrp: anggota.nip, pangkat: anggota.pangkat, 
+      satuan_kerja: anggota.unitKerja, nomor_rekening: anggota.rekeningBni, 
+      nama_bank: 'BNI', fc_sk: anggota.fcSkUrl || 'belum' 
     });
     setIsDrawerOpen(true);
   };
@@ -49,23 +63,47 @@ const Anggota: React.FC = () => {
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
-    setAnggotaList(anggotaList.filter(a => a.id !== deleteId));
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await api.delete(`/anggota/${deleteId}`);
+      setAnggotaList(anggotaList.filter(a => a.id !== deleteId));
+      setIsConfirmOpen(false); // Fix freeze bug!
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting anggota:', error);
+      alert('Gagal menghapus anggota');
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      setAnggotaList(anggotaList.map(a => a.id === editingId ? { ...a, ...formData } : a));
-    } else {
-      const newId = `ANG-00${anggotaList.length + 1}`;
-      setAnggotaList([{ id: newId, ...formData }, ...anggotaList]);
+    try {
+      const payload = {
+        namaLengkap: formData.nama_lengkap,
+        nip: formData.nip_nrp,
+        pangkat: formData.pangkat,
+        unitKerja: formData.satuan_kerja,
+        rekeningBni: formData.nomor_rekening,
+        fcSkUrl: formData.fc_sk
+      };
+
+      if (editingId) {
+        await api.put(`/anggota/${editingId}`, payload);
+      } else {
+        await api.post('/anggota', payload);
+      }
+      
+      setIsDrawerOpen(false);
+      fetchAnggota(); // Refresh data
+    } catch (error) {
+      console.error('Error saving anggota:', error);
+      alert('Gagal menyimpan data anggota');
     }
-    setIsDrawerOpen(false);
   };
 
   // Filter
-  const filteredData = anggotaList.filter(a => a.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredData = anggotaList.filter(a => (a.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -108,7 +146,11 @@ const Anggota: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      {anggotaList.length === 0 ? (
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : anggotaList.length === 0 ? (
         <EmptyState 
           icon={Users} title="Belum ada anggota terdaftar" description="Data anggota koperasi akan ditampilkan di sini." actionText="Tambah Anggota Baru" onAction={handleOpenAdd}
         />
@@ -130,14 +172,14 @@ const Anggota: React.FC = () => {
               <tbody className="divide-y divide-slate-100/50 text-sm">
                 {filteredData.map((row) => (
                   <tr key={row.id} className="hover:bg-white/40 transition-colors">
-                    <td className="px-5 py-3.5 font-semibold text-slate-800">{row.nama_lengkap}</td>
-                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.nip_nrp || '-'}</td>
+                    <td className="px-5 py-3.5 font-semibold text-slate-800">{row.namaLengkap}</td>
+                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.nip || '-'}</td>
                     <td className="px-5 py-3.5 text-slate-600">{row.pangkat || '-'}</td>
-                    <td className="px-5 py-3.5 text-slate-600">{row.satuan_kerja || '-'}</td>
-                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.nomor_rekening || '-'}</td>
+                    <td className="px-5 py-3.5 text-slate-600">{row.unitKerja || '-'}</td>
+                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.rekeningBni || '-'}</td>
                     <td className="px-5 py-3.5">
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fc_sk === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {row.fc_sk || 'belum'}
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fcSkUrl === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {row.fcSkUrl || 'belum'}
                       </span>
                     </td>
                     <td className="px-5 py-3.5">

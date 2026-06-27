@@ -1,50 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Wallet, FileText } from 'lucide-react';
 import Drawer from '../components/Drawer';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
-
-// Dummy data based on V2 structure
-const initialSimpanan = [
-  { id: 'SMP-001', tanggal_transaksi: '2026-06-01', nama_lengkap: 'Budi Santoso', jenis_simpanan: 'pokok', nominal: 500000, status_approval: 'approved' },
-  { id: 'SMP-002', tanggal_transaksi: '2026-06-15', nama_lengkap: 'Siti Aminah', jenis_simpanan: 'wajib', nominal: 100000, status_approval: 'approved' },
-  { id: 'SMP-003', tanggal_transaksi: '2026-06-20', nama_lengkap: 'Agus Pratama', jenis_simpanan: 'sukarela', nominal: 250000, status_approval: 'pending' },
-];
+import { api } from '../lib/api';
 
 const Simpanan: React.FC = () => {
-  const [dataList, setDataList] = useState(initialSimpanan);
-  const [simpananTab, setSimpananTab] = useState('pokok');
+  const [dataList, setDataList] = useState<any[]>([]);
+  const [anggotaList, setAnggotaList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [simpananTab, setSimpananTab] = useState('POKOK');
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({ nama_lengkap: '', jenis_simpanan: 'pokok', nominal: '' });
+  const [formData, setFormData] = useState({ anggotaId: '', jenis_simpanan: 'POKOK', nominal: '' });
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [simpananData, anggotaData] = await Promise.all([
+        api.get('/simpanan'),
+        api.get('/anggota')
+      ]);
+      setDataList(simpananData);
+      setAnggotaList(anggotaData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      alert('Gagal mengambil data simpanan.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleDeleteClick = (id: string) => {
     setDeleteId(id);
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
-    setDataList(dataList.filter(item => item.id !== deleteId));
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await api.delete(`/simpanan/${deleteId}`);
+      setDataList(dataList.filter(item => item.id !== deleteId));
+      setIsConfirmOpen(false);
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting simpanan:', error);
+      alert('Gagal menghapus simpanan');
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newId = `SMP-00${dataList.length + 1}`;
-    setDataList([
-      { 
-        id: newId, 
-        tanggal_transaksi: new Date().toISOString().split('T')[0], 
-        nama_lengkap: formData.nama_lengkap,
-        jenis_simpanan: formData.jenis_simpanan,
-        nominal: parseInt(formData.nominal.replace(/\D/g, '')) || 0,
-        status_approval: 'approved' 
-      }, 
-      ...dataList
-    ]);
-    setIsDrawerOpen(false);
+    if (!formData.anggotaId) {
+      alert('Pilih anggota terlebih dahulu');
+      return;
+    }
+    
+    try {
+      const payload = {
+        anggotaId: formData.anggotaId,
+        jenisSimpanan: formData.jenis_simpanan,
+        saldo: parseInt(formData.nominal.replace(/\D/g, '')) || 0
+      };
+      
+      await api.post('/simpanan', payload);
+      setIsDrawerOpen(false);
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error('Error saving simpanan:', error);
+      alert('Gagal menyimpan data simpanan');
+    }
   };
 
   const filteredData = dataList.filter(item => item.jenis_simpanan === simpananTab);
@@ -73,7 +105,7 @@ const Simpanan: React.FC = () => {
       <div className="glass-panel overflow-hidden">
         {/* Tab Selection */}
         <div className="flex border-b border-slate-200/50 bg-white/30">
-          {['pokok', 'wajib', 'sukarela'].map((tab) => (
+          {['POKOK', 'WAJIB', 'SUKARELA'].map((tab) => (
             <button
               key={tab}
               onClick={() => setSimpananTab(tab)}
@@ -87,7 +119,11 @@ const Simpanan: React.FC = () => {
           ))}
         </div>
 
-        {filteredData.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : filteredData.length === 0 ? (
           <div className="py-12">
             <EmptyState icon={Wallet} title="Belum ada transaksi" description={`Tidak ada riwayat transaksi simpanan ${simpananTab} saat ini.`} actionText="Catat Simpanan" onAction={() => setIsDrawerOpen(true)} />
           </div>
@@ -109,16 +145,13 @@ const Simpanan: React.FC = () => {
                 {filteredData.map((item, index) => (
                   <tr key={item.id} className="hover:bg-white/40 transition-colors group">
                     <td className="px-6 py-3.5 font-semibold text-slate-500">{index + 1}</td>
-                    <td className="px-6 py-3.5 text-slate-600 font-mono">{new Date(item.tanggal_transaksi).toLocaleDateString('id-ID')}</td>
-                    <td className="px-6 py-3.5 font-semibold text-slate-800">{item.nama_lengkap}</td>
-                    <td className="px-6 py-3.5 capitalize text-slate-600">{item.jenis_simpanan}</td>
-                    <td className="px-6 py-3.5 font-bold text-emerald-600">Rp {item.nominal.toLocaleString('id-ID')}</td>
+                    <td className="px-6 py-3.5 text-slate-600 font-mono">{new Date(item.createdAt).toLocaleDateString('id-ID')}</td>
+                    <td className="px-6 py-3.5 font-semibold text-slate-800">{item.anggota?.namaLengkap || '-'}</td>
+                    <td className="px-6 py-3.5 capitalize text-slate-600">{item.jenisSimpanan}</td>
+                    <td className="px-6 py-3.5 font-bold text-emerald-600">Rp {item.saldo.toLocaleString('id-ID')}</td>
                     <td className="px-6 py-3.5 text-center">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                        item.status_approval === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                        item.status_approval === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {item.status_approval}
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
+                        APPROVED
                       </span>
                     </td>
                     <td className="px-6 py-3.5 text-center">
@@ -138,11 +171,16 @@ const Simpanan: React.FC = () => {
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} title="Catat Simpanan Anggota" onSubmit={handleSubmit}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nama Anggota</label>
-            <input 
-              type="text" required value={formData.nama_lengkap} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})}
-              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary" placeholder="Contoh: Budi Santoso"
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Anggota</label>
+            <select 
+              required value={formData.anggotaId} onChange={e => setFormData({...formData, anggotaId: e.target.value})}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary"
+            >
+              <option value="" disabled>-- Pilih Anggota --</option>
+              {anggotaList.map(a => (
+                <option key={a.id} value={a.id}>{a.nip} - {a.namaLengkap}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Jenis Simpanan</label>
@@ -150,9 +188,9 @@ const Simpanan: React.FC = () => {
               value={formData.jenis_simpanan} onChange={e => setFormData({...formData, jenis_simpanan: e.target.value})}
               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary"
             >
-              <option value="pokok">Pokok</option>
-              <option value="wajib">Wajib</option>
-              <option value="sukarela">Sukarela</option>
+              <option value="POKOK">Pokok</option>
+              <option value="WAJIB">Wajib</option>
+              <option value="SUKARELA">Sukarela</option>
             </select>
           </div>
           <div>

@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, CreditCard, UserCheck, TrendingUp } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
-
-const initialPinjaman = [
-  { id: 'PNJ-001', nama_lengkap: 'Budi Santoso', nominal: 10000000, tenor: 12, angsuran: 933333, status: 'menunggu_verifikasi', date: '25 Jun 2026' },
-  { id: 'PNJ-002', nama_lengkap: 'Siti Aminah', nominal: 5000000, tenor: 6, angsuran: 883333, status: 'diproses', date: '20 Jun 2026' },
-  { id: 'PNJ-003', nama_lengkap: 'Agus Pratama', nominal: 20000000, tenor: 24, angsuran: 1033333, status: 'dicairkan', date: '15 Jun 2026' },
-];
+import { api } from '../lib/api';
 
 const Pinjaman: React.FC = () => {
-  const [dataList, setDataList] = useState(initialPinjaman);
+  const [dataList, setDataList] = useState<any[]>([]);
+  const [anggotaList, setAnggotaList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [subTab, setSubTab] = useState<'workflow' | 'aktif'>('workflow');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -20,7 +17,28 @@ const Pinjaman: React.FC = () => {
   const [actionData, setActionData] = useState<{id: string, action: string} | null>(null);
 
   // Form State
-  const [formData, setFormData] = useState({ nama_lengkap: '', nominal: '', tenor: 12, tujuan: '' });
+  const [formData, setFormData] = useState({ anggotaId: '', nominal: '', tenor: 12, tujuan: '' });
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [pinjamanData, anggotaData] = await Promise.all([
+        api.get('/pinjaman'),
+        api.get('/anggota')
+      ]);
+      setDataList(pinjamanData);
+      setAnggotaList(anggotaData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      alert('Gagal mengambil data pinjaman.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   // Kalkulasi Bunga (1% Flat)
   const nominalVal = parseInt(formData.nominal.replace(/\D/g, '')) || 0;
@@ -34,44 +52,56 @@ const Pinjaman: React.FC = () => {
     setIsConfirmOpen(true);
   };
 
-  const confirmAction = () => {
+  const confirmAction = async () => {
     if(!actionData) return;
-    if (actionData.action === 'delete') {
-      setDataList(dataList.filter(item => item.id !== actionData.id));
-    } else {
-      setDataList(dataList.map(item => item.id === actionData.id ? { ...item, status: actionData.action } : item));
+    try {
+      if (actionData.action === 'delete') {
+        await api.delete(`/pinjaman/${actionData.id}`);
+      } else {
+        await api.put(`/pinjaman/${actionData.id}/status`, { status: actionData.action });
+      }
+      setIsConfirmOpen(false);
+      setActionData(null);
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error('Error in action:', error);
+      alert('Gagal memproses aksi');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newId = `PNJ-00${dataList.length + 1}`;
-    setDataList([
-      { 
-        id: newId, 
-        nama_lengkap: formData.nama_lengkap, 
-        nominal: nominalVal, 
-        tenor: formData.tenor,
-        angsuran: Math.round(estTotal),
-        status: 'menunggu_verifikasi',
-        date: new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})
-      }, 
-      ...dataList
-    ]);
-    setIsDrawerOpen(false);
+    if (!formData.anggotaId) {
+      alert('Pilih anggota terlebih dahulu');
+      return;
+    }
+    try {
+      const payload = {
+        anggotaId: formData.anggotaId,
+        nominal: nominalVal,
+        tenor: formData.tenor
+      };
+      
+      await api.post('/pinjaman', payload);
+      setIsDrawerOpen(false);
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error('Error saving pinjaman:', error);
+      alert('Gagal menyimpan data pinjaman');
+    }
   };
 
   // Filter Data
-  const pendingData = dataList.filter(item => !['dicairkan', 'lunas', 'ditolak'].includes(item.status) && item.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
-  const activeData = dataList.filter(item => ['dicairkan', 'lunas', 'ditolak'].includes(item.status) && item.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
+  const pendingData = dataList.filter(item => ['PENDING_ADMIN', 'PENDING_BENDAHARA'].includes(item.status) && (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const activeData = dataList.filter(item => ['DICAIRKAN', 'LUNAS', 'DITOLAK'].includes(item.status) && (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
   const displayData = subTab === 'workflow' ? pendingData : activeData;
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'dicairkan': return 'bg-blue-100 text-blue-700';
-      case 'lunas': return 'bg-emerald-100 text-emerald-700';
-      case 'ditolak': return 'bg-red-100 text-red-700';
-      default: return 'bg-amber-100 text-amber-700'; // pending/menunggu dll
+      case 'DICAIRKAN': return 'bg-blue-100 text-blue-700';
+      case 'LUNAS': return 'bg-emerald-100 text-emerald-700';
+      case 'DITOLAK': return 'bg-red-100 text-red-700';
+      default: return 'bg-amber-100 text-amber-700'; // pending
     }
   };
 
@@ -120,7 +150,11 @@ const Pinjaman: React.FC = () => {
           </div>
         </div>
 
-        {displayData.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : displayData.length === 0 ? (
           <div className="py-12">
             <EmptyState icon={CreditCard} title={`Belum ada data ${subTab}`} description="Data pengajuan akan muncul di sini sesuai kategori." />
           </div>
@@ -139,7 +173,7 @@ const Pinjaman: React.FC = () => {
               <tbody className="divide-y divide-slate-100/50 text-sm">
                 {displayData.map((item) => (
                   <tr key={item.id} className="hover:bg-white/40 transition-colors group">
-                    <td className="px-6 py-4 font-semibold text-slate-800">{item.nama_lengkap}</td>
+                    <td className="px-6 py-4 font-semibold text-slate-800">{item.anggota?.namaLengkap || '-'}</td>
                     <td className="px-6 py-4 font-bold text-secondary">Rp {item.nominal.toLocaleString('id-ID')}</td>
                     <td className="px-6 py-4 text-slate-600">{item.tenor} bln</td>
                     <td className="px-6 py-4">
@@ -150,22 +184,17 @@ const Pinjaman: React.FC = () => {
                     <td className="px-6 py-4 text-center">
                       {subTab === 'workflow' ? (
                         <div className="flex items-center justify-center gap-2">
-                          {item.status === 'menunggu_verifikasi' && (
-                            <button onClick={() => handleActionClick(item.id, 'diproses')} className="px-3 py-1 bg-blue-900 text-blue-100 hover:bg-blue-800 rounded-lg text-[10px] font-semibold transition-colors">
+                          {item.status === 'PENDING_ADMIN' && (
+                            <button onClick={() => handleActionClick(item.id, 'PENDING_BENDAHARA')} className="px-3 py-1 bg-blue-900 text-blue-100 hover:bg-blue-800 rounded-lg text-[10px] font-semibold transition-colors">
                               Verifikasi
                             </button>
                           )}
-                          {item.status === 'diproses' && (
-                            <button onClick={() => handleActionClick(item.id, 'disetujui_bendahara')} className="px-3 py-1 bg-purple-900 text-purple-100 hover:bg-purple-800 rounded-lg text-[10px] font-semibold transition-colors">
-                              Setujui Bendahara
-                            </button>
-                          )}
-                          {item.status === 'disetujui_bendahara' && (
-                            <button onClick={() => handleActionClick(item.id, 'dicairkan')} className="px-3 py-1 bg-secondary text-primary hover:bg-secondary-hover rounded-lg text-[10px] font-bold transition-colors">
+                          {item.status === 'PENDING_BENDAHARA' && (
+                            <button onClick={() => handleActionClick(item.id, 'DICAIRKAN')} className="px-3 py-1 bg-secondary text-primary hover:bg-secondary-hover rounded-lg text-[10px] font-bold transition-colors">
                               Cairkan Dana
                             </button>
                           )}
-                          <button onClick={() => handleActionClick(item.id, 'ditolak')} className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg text-[10px] font-semibold transition-colors">
+                          <button onClick={() => handleActionClick(item.id, 'DITOLAK')} className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg text-[10px] font-semibold transition-colors">
                             Tolak
                           </button>
                         </div>
@@ -187,11 +216,16 @@ const Pinjaman: React.FC = () => {
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} title="Input Pinjaman Manual" onSubmit={handleSubmit}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nama Anggota</label>
-            <input 
-              type="text" required value={formData.nama_lengkap} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})}
-              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary" placeholder="Masukkan nama..."
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Anggota</label>
+            <select 
+              required value={formData.anggotaId} onChange={e => setFormData({...formData, anggotaId: e.target.value})}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary"
+            >
+              <option value="" disabled>-- Pilih Anggota --</option>
+              {anggotaList.map(a => (
+                <option key={a.id} value={a.id}>{a.nip} - {a.namaLengkap}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nominal Pinjaman (Rp)</label>

@@ -5,6 +5,10 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 import authRoutes from './routes/auth';
+import anggotaRoutes from './routes/anggota';
+import simpananRoutes from './routes/simpanan';
+import pinjamanRoutes from './routes/pinjaman';
+import angsuranRoutes from './routes/angsuran';
 
 dotenv.config();
 
@@ -19,6 +23,10 @@ app.use(morgan('dev'));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/anggota', anggotaRoutes);
+app.use('/api/simpanan', simpananRoutes);
+app.use('/api/pinjaman', pinjamanRoutes);
+app.use('/api/angsuran', angsuranRoutes);
 
 // Root route
 app.get('/', (req, res) => {

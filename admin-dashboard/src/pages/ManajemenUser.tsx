@@ -20,6 +20,7 @@ const ManajemenUser: React.FC = () => {
 
   const confirmDelete = () => {
     setUsers(users.filter(u => u.id !== deleteId));
+    setIsConfirmOpen(false);
   };
 
   return (
