@@ -33,7 +33,14 @@ model Anggota {
   unitKerja    String?
   email        String?  @unique
   noHp         String?
-  rekeningBni  String?
+  tempatLahir  String?
+  tanggalLahir DateTime?
+  alamatKantor String?
+  noKtp        String?
+  alamatRumah  String?
+  noRekening   String?
+  fcSkStatus   String?  @default("belum") // "sudah" atau "belum"
+  
   fcSkUrl      String?
   fotoProfilUrl String?
   status       StatusAnggota @default(AKTIF)
@@ -202,4 +209,14 @@ model Chat {
   isRead         Boolean  @default(false)
   
   createdAt      DateTime @default(now())
+}
+
+// Pengaturan Umum (Data Master Pangkat, Unit Kerja, dll)
+model PengaturanUmum {
+  id             Int      @id @default(autoincrement())
+  kategori       String   // e.g., 'PANGKAT', 'UNIT_KERJA'
+  nilai          String   // e.g., 'Golongan II/A', 'Dinas Pendidikan'
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

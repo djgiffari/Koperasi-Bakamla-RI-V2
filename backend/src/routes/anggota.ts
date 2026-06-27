@@ -1,7 +1,21 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import multer from 'multer';
+import path from 'path';
 
 const router = Router();
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'sk-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 // GET all anggota
 router.get('/', async (req: Request, res: Response) => {
@@ -17,18 +31,31 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // POST new anggota
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', upload.single('fcSkFile'), async (req: Request, res: Response) => {
   try {
-    const { namaLengkap, nip, pangkat, unitKerja, rekeningBni, fcSkUrl } = req.body;
+    const { 
+      namaLengkap, nip, pangkat, unitKerja, 
+      tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus 
+    } = req.body;
     
-    // Status can be mapped from fc_sk if needed, but we'll use string for now based on schema
+    let fcSkUrl = null;
+    if (req.file) {
+      fcSkUrl = `/uploads/${req.file.filename}`;
+    }
+    
     const newAnggota = await prisma.anggota.create({
       data: {
         namaLengkap,
         nip,
         pangkat,
         unitKerja,
-        rekeningBni,
+        tempatLahir,
+        tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : null,
+        alamatKantor,
+        noKtp,
+        alamatRumah,
+        noRekening,
+        fcSkStatus: fcSkStatus || 'belum',
         fcSkUrl
       }
     });
@@ -41,21 +68,35 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT update anggota
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', upload.single('fcSkFile'), async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
-    const { namaLengkap, nip, pangkat, unitKerja, rekeningBni, fcSkUrl } = req.body;
+    const { 
+      namaLengkap, nip, pangkat, unitKerja, 
+      tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus 
+    } = req.body;
+    
+    let updateData: any = {
+      namaLengkap,
+      nip,
+      pangkat,
+      unitKerja,
+      tempatLahir,
+      tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : null,
+      alamatKantor,
+      noKtp,
+      alamatRumah,
+      noRekening,
+      fcSkStatus
+    };
+
+    if (req.file) {
+      updateData.fcSkUrl = `/uploads/${req.file.filename}`;
+    }
     
     const updatedAnggota = await prisma.anggota.update({
       where: { id },
-      data: {
-        namaLengkap,
-        nip,
-        pangkat,
-        unitKerja,
-        rekeningBni,
-        fcSkUrl
-      }
+      data: updateData
     });
     
     res.json(updatedAnggota);

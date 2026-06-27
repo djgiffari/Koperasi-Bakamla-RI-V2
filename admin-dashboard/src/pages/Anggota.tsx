@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Edit2, Trash2, Plus, Upload, Download, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, Edit2, Trash2, Plus, Upload, Download, CreditCard, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 
 const Anggota: React.FC = () => {
   const [anggotaList, setAnggotaList] = useState<any[]>([]);
+  const [masterData, setMasterData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -19,43 +20,60 @@ const Anggota: React.FC = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Form State (Struktur V2)
-  const [formData, setFormData] = useState({ 
-    nama_lengkap: '', nip_nrp: '', pangkat: '', satuan_kerja: '', nomor_rekening: '', nama_bank: 'BNI', fc_sk: 'belum' 
-  });
+  // Form State
+  const initialForm = { 
+    namaLengkap: '', tempatLahir: '', tanggalLahir: '', nip: '', pangkat: '', unitKerja: '', 
+    alamatKantor: '', noKtp: '', alamatRumah: '', noHp: '', noRekening: '', fcSkStatus: 'belum' 
+  };
+  const [formData, setFormData] = useState(initialForm);
+  const [fcSkFile, setFcSkFile] = useState<File | null>(null);
 
   // Fetch data
-  const fetchAnggota = async () => {
+  const fetchData = async () => {
     setIsLoading(true);
     try {
-      const data = await api.get('/anggota');
-      setAnggotaList(data);
+      const [anggotaData, masterRes] = await Promise.all([
+        api.get('/anggota'),
+        api.get('/pengaturan')
+      ]);
+      setAnggotaList(anggotaData);
+      setMasterData(masterRes);
     } catch (error) {
-      console.error('Error fetching anggota:', error);
-      // toast.error('Gagal mengambil data anggota.');
+      console.error('Error fetching data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAnggota();
+    fetchData();
   }, []);
 
   // Handlers
   const handleOpenAdd = () => {
     setEditingId(null);
-    setFormData({ nama_lengkap: '', nip_nrp: '', pangkat: '', satuan_kerja: '', nomor_rekening: '', nama_bank: 'BNI', fc_sk: 'belum' });
+    setFormData(initialForm);
+    setFcSkFile(null);
     setIsDrawerOpen(true);
   };
 
   const handleOpenEdit = (anggota: any) => {
     setEditingId(anggota.id);
     setFormData({ 
-      nama_lengkap: anggota.namaLengkap, nip_nrp: anggota.nip, pangkat: anggota.pangkat, 
-      satuan_kerja: anggota.unitKerja, nomor_rekening: anggota.rekeningBni, 
-      nama_bank: 'BNI', fc_sk: anggota.fcSkUrl || 'belum' 
+      namaLengkap: anggota.namaLengkap || '', 
+      tempatLahir: anggota.tempatLahir || '', 
+      tanggalLahir: anggota.tanggalLahir ? anggota.tanggalLahir.split('T')[0] : '', 
+      nip: anggota.nip || '', 
+      pangkat: anggota.pangkat || '', 
+      unitKerja: anggota.unitKerja || '', 
+      alamatKantor: anggota.alamatKantor || '', 
+      noKtp: anggota.noKtp || '', 
+      alamatRumah: anggota.alamatRumah || '', 
+      noHp: anggota.noHp || '', 
+      noRekening: anggota.noRekening || anggota.rekeningBni || '', 
+      fcSkStatus: anggota.fcSkStatus || 'belum' 
     });
+    setFcSkFile(null);
     setIsDrawerOpen(true);
   };
 
@@ -69,7 +87,7 @@ const Anggota: React.FC = () => {
     try {
       await api.delete(`/anggota/${deleteId}`);
       setAnggotaList(anggotaList.filter(a => a.id !== deleteId));
-      setIsConfirmOpen(false); // Fix freeze bug!
+      setIsConfirmOpen(false);
       setDeleteId(null);
       toast.success('Anggota berhasil dihapus');
     } catch (error) {
@@ -81,23 +99,32 @@ const Anggota: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = {
-        namaLengkap: formData.nama_lengkap,
-        nip: formData.nip_nrp,
-        pangkat: formData.pangkat,
-        unitKerja: formData.satuan_kerja,
-        rekeningBni: formData.nomor_rekening,
-        fcSkUrl: formData.fc_sk
+      const submitData = new FormData();
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value) submitData.append(key, value);
+      });
+      if (fcSkFile) {
+        submitData.append('fcSkFile', fcSkFile);
+      }
+
+      const token = localStorage.getItem('koperasi_token');
+      const fetchOpts = {
+        method: editingId ? 'PUT' : 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: submitData
       };
 
-      if (editingId) {
-        await api.put(`/anggota/${editingId}`, payload);
-      } else {
-        await api.post('/anggota', payload);
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const response = await fetch(`${API_URL}/anggota${editingId ? `/${editingId}` : ''}`, fetchOpts);
+
+      if (!response.ok) {
+        throw new Error('Gagal menyimpan data');
       }
       
       setIsDrawerOpen(false);
-      fetchAnggota(); // Refresh data
+      fetchData();
       toast.success('Anggota berhasil disimpan');
     } catch (error) {
       console.error('Error saving anggota:', error);
@@ -105,8 +132,12 @@ const Anggota: React.FC = () => {
     }
   };
 
-  // Filter
   const filteredData = anggotaList.filter(a => (a.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const pangkatOptions = masterData.filter(d => d.kategori === 'PANGKAT');
+  const unitKerjaOptions = masterData.filter(d => d.kategori === 'UNIT_KERJA');
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const BASE_URL = API_URL.replace('/api', '');
 
   return (
     <div className="space-y-6">
@@ -163,33 +194,55 @@ const Anggota: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-primary/5 text-primary text-xs uppercase tracking-wider border-b border-primary/10">
-                  <th className="px-5 py-4 font-bold">Nama Lengkap</th>
-                  <th className="px-5 py-4 font-bold">NIP / NRP</th>
-                  <th className="px-5 py-4 font-bold">Pangkat</th>
-                  <th className="px-5 py-4 font-bold">Unit Kerja</th>
-                  <th className="px-5 py-4 font-bold">No Rek BNI</th>
-                  <th className="px-5 py-4 font-bold">FC SK</th>
-                  <th className="px-5 py-4 font-bold text-center">Aksi</th>
+                  <th className="px-3 py-4 font-bold">No</th>
+                  <th className="px-4 py-4 font-bold min-w-[200px]">Nama<br/>NIP<br/>Pangkat</th>
+                  <th className="px-4 py-4 font-bold min-w-[150px]">Tempat, Tgl Lahir</th>
+                  <th className="px-4 py-4 font-bold">Unit Kerja</th>
+                  <th className="px-4 py-4 font-bold">Alamat Kantor</th>
+                  <th className="px-4 py-4 font-bold">No. KTP</th>
+                  <th className="px-4 py-4 font-bold">Alamat Rumah</th>
+                  <th className="px-4 py-4 font-bold">No. Telepon/HP</th>
+                  <th className="px-4 py-4 font-bold">No. Rekening</th>
+                  <th className="px-4 py-4 font-bold">FC. SK</th>
+                  <th className="px-4 py-4 font-bold text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/50 text-sm">
-                {filteredData.map((row) => (
-                  <tr key={row.id} className="hover:bg-white/40 transition-colors">
-                    <td className="px-5 py-3.5 font-semibold text-slate-800">{row.namaLengkap}</td>
-                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.nip || '-'}</td>
-                    <td className="px-5 py-3.5 text-slate-600">{row.pangkat || '-'}</td>
-                    <td className="px-5 py-3.5 text-slate-600">{row.unitKerja || '-'}</td>
-                    <td className="px-5 py-3.5 text-slate-600 font-mono">{row.rekeningBni || '-'}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fcSkUrl === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {row.fcSkUrl || 'belum'}
-                      </span>
+                {filteredData.map((row, index) => (
+                  <tr key={row.id} className="hover:bg-white/40 transition-colors align-top">
+                    <td className="px-3 py-3.5 text-slate-500 font-mono">{index + 1}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="font-semibold text-slate-800">{row.namaLengkap}</div>
+                      <div className="text-slate-500 text-xs mt-1 font-mono">{row.nip || '-'}</div>
+                      <div className="text-slate-500 text-xs mt-1">{row.pangkat || '-'}</div>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3.5 text-slate-600">
+                      <div>{row.tempatLahir || '-'}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {row.tanggalLahir ? new Date(row.tanggalLahir).toLocaleDateString('id-ID') : '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-600">{row.unitKerja || '-'}</td>
+                    <td className="px-4 py-3.5 text-slate-600 text-xs">{row.alamatKantor || '-'}</td>
+                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noKtp || '-'}</td>
+                    <td className="px-4 py-3.5 text-slate-600 text-xs">{row.alamatRumah || '-'}</td>
+                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noHp || '-'}</td>
+                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noRekening || row.rekeningBni || '-'}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fcSkStatus === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                          {row.fcSkStatus || 'belum'}
+                        </span>
+                        {row.fcSkUrl && (
+                          <a href={`${BASE_URL}${row.fcSkUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs flex items-center gap-1 mt-1">
+                            <Eye size={12} /> Lihat PDF
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center justify-center gap-2">
-                        <button className="text-xs font-bold text-primary hover:underline hover:text-secondary transition-colors px-2">Detail</button>
                         <button onClick={() => handleOpenEdit(row)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Profil"><Edit2 size={15} /></button>
-                        <button className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors" title="Cetak Kartu Anggota"><CreditCard size={15} /></button>
                         <button onClick={() => handleDeleteClick(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Anggota"><Trash2 size={15} /></button>
                       </div>
                     </td>
@@ -198,50 +251,89 @@ const Anggota: React.FC = () => {
               </tbody>
             </table>
           </div>
-          
-          {/* Pagination Dummy */}
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 bg-white/30">
-            <p>Menampilkan {filteredData.length} dari {anggotaList.length} data</p>
-            <div className="flex items-center gap-2">
-              <button className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"><ChevronLeft size={14}/></button>
-              <span className="font-medium">Halaman 1 dari 1</span>
-              <button className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"><ChevronRight size={14}/></button>
-            </div>
-          </div>
         </div>
       )}
 
       {/* Action Drawer */}
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} title={editingId ? "Edit Data Anggota" : "Tambah Anggota Baru"} onSubmit={handleSubmit}>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
-            <input type="text" required value={formData.nama_lengkap} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">NIP / NRP</label>
-            <input type="text" required value={formData.nip_nrp} onChange={e => setFormData({...formData, nip_nrp: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Pangkat</label>
-            <input type="text" value={formData.pangkat} onChange={e => setFormData({...formData, pangkat: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Unit Kerja / Satuan</label>
-            <input type="text" value={formData.satuan_kerja} onChange={e => setFormData({...formData, satuan_kerja: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nomor Rek BNI</label>
-              <input type="text" value={formData.nomor_rekening} onChange={e => setFormData({...formData, nomor_rekening: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none" />
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
+              <input type="text" required value={formData.namaLengkap} onChange={e => setFormData({...formData, namaLengkap: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Status FC SK</label>
-              <select value={formData.fc_sk} onChange={e => setFormData({...formData, fc_sk: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl focus:border-primary outline-none">
+              <label className="block text-sm font-medium text-slate-700 mb-1">N.I.P / N.R.P</label>
+              <input type="text" value={formData.nip} onChange={e => setFormData({...formData, nip: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Tempat Lahir</label>
+              <input type="text" value={formData.tempatLahir} onChange={e => setFormData({...formData, tempatLahir: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal Lahir (dd-mm-yyyy)</label>
+              <input type="date" value={formData.tanggalLahir} onChange={e => setFormData({...formData, tanggalLahir: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Pangkat / Golongan</label>
+              <input list="pangkat-list" value={formData.pangkat} onChange={e => setFormData({...formData, pangkat: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" placeholder="Ketik atau pilih..." />
+              <datalist id="pangkat-list">
+                {pangkatOptions.map(p => <option key={p.id} value={p.nilai} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Instansi / Unit Kerja</label>
+              <input list="unit-list" value={formData.unitKerja} onChange={e => setFormData({...formData, unitKerja: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" placeholder="Ketik atau pilih..." />
+              <datalist id="unit-list">
+                {unitKerjaOptions.map(u => <option key={u.id} value={u.nilai} />)}
+              </datalist>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Alamat Kantor</label>
+            <textarea rows={2} value={formData.alamatKantor} onChange={e => setFormData({...formData, alamatKantor: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm resize-none" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">No. KTP</label>
+              <input type="text" value={formData.noKtp} onChange={e => setFormData({...formData, noKtp: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">No. Telepon / HP</label>
+              <input type="text" value={formData.noHp} onChange={e => setFormData({...formData, noHp: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Alamat Rumah</label>
+            <textarea rows={2} value={formData.alamatRumah} onChange={e => setFormData({...formData, alamatRumah: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm resize-none" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">No. Rekening</label>
+              <input type="text" value={formData.noRekening} onChange={e => setFormData({...formData, noRekening: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">FC. SK</label>
+              <select value={formData.fcSkStatus} onChange={e => setFormData({...formData, fcSkStatus: e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-primary outline-none text-sm">
                 <option value="belum">Belum</option>
                 <option value="sudah">Sudah</option>
               </select>
             </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Lampiran FC. SK (PDF)</label>
+            <input type="file" accept="application/pdf" onChange={e => setFcSkFile(e.target.files ? e.target.files[0] : null)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none" />
           </div>
         </div>
       </Drawer>

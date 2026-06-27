@@ -14,7 +14,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = __importDefault(require("../utils/prisma"));
+const multer_1 = __importDefault(require("multer"));
+const path_1 = __importDefault(require("path"));
 const router = (0, express_1.Router)();
+// Configure multer storage
+const storage = multer_1.default.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'sk-' + uniqueSuffix + path_1.default.extname(file.originalname));
+    }
+});
+const upload = (0, multer_1.default)({ storage: storage });
 // GET all anggota
 router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -29,17 +42,26 @@ router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 }));
 // POST new anggota
-router.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/', upload.single('fcSkFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { namaLengkap, nip, pangkat, unitKerja, rekeningBni, fcSkUrl } = req.body;
-        // Status can be mapped from fc_sk if needed, but we'll use string for now based on schema
+        const { namaLengkap, nip, pangkat, unitKerja, tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus } = req.body;
+        let fcSkUrl = null;
+        if (req.file) {
+            fcSkUrl = `/uploads/${req.file.filename}`;
+        }
         const newAnggota = yield prisma_1.default.anggota.create({
             data: {
                 namaLengkap,
                 nip,
                 pangkat,
                 unitKerja,
-                rekeningBni,
+                tempatLahir,
+                tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : null,
+                alamatKantor,
+                noKtp,
+                alamatRumah,
+                noRekening,
+                fcSkStatus: fcSkStatus || 'belum',
                 fcSkUrl
             }
         });
@@ -51,20 +73,29 @@ router.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 }));
 // PUT update anggota
-router.put('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put('/:id', upload.single('fcSkFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const id = parseInt(req.params.id);
-        const { namaLengkap, nip, pangkat, unitKerja, rekeningBni, fcSkUrl } = req.body;
+        const { namaLengkap, nip, pangkat, unitKerja, tempatLahir, tanggalLahir, alamatKantor, noKtp, alamatRumah, noRekening, fcSkStatus } = req.body;
+        let updateData = {
+            namaLengkap,
+            nip,
+            pangkat,
+            unitKerja,
+            tempatLahir,
+            tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : null,
+            alamatKantor,
+            noKtp,
+            alamatRumah,
+            noRekening,
+            fcSkStatus
+        };
+        if (req.file) {
+            updateData.fcSkUrl = `/uploads/${req.file.filename}`;
+        }
         const updatedAnggota = yield prisma_1.default.anggota.update({
             where: { id },
-            data: {
-                namaLengkap,
-                nip,
-                pangkat,
-                unitKerja,
-                rekeningBni,
-                fcSkUrl
-            }
+            data: updateData
         });
         res.json(updatedAnggota);
     }
