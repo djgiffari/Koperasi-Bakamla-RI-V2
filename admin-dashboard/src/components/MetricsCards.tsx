@@ -1,45 +1,54 @@
 import React from 'react';
 import { Users, Wallet, CreditCard, ShoppingBag, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
-const metrics = [
-  {
-    title: 'Total Anggota',
-    value: '1,245',
-    trend: '+12 bulan ini',
-    isPositive: true,
-    icon: Users,
-    color: 'from-blue-500 to-blue-700'
-  },
-  {
-    title: 'Simpanan Keseluruhan',
-    value: 'Rp 4.25B',
-    trend: '+Rp 150M bulan ini',
-    isPositive: true,
-    icon: Wallet,
-    color: 'from-secondary to-yellow-600'
-  },
-  {
-    title: 'Pinjaman Aktif',
-    value: 'Rp 2.1B',
-    trend: 'Estimasi kembali Rp 80M',
-    isPositive: true,
-    icon: CreditCard,
-    color: 'from-emerald-500 to-emerald-700'
-  },
-  {
-    title: 'Omset Toko Koperasi',
-    value: 'Rp 45.2M',
-    trend: '-Rp 2M dari bulan lalu',
-    isPositive: false,
-    icon: ShoppingBag,
-    color: 'from-purple-500 to-purple-700'
+interface MetricsCardsProps {
+  metrics?: {
+    totalAnggota: number;
+    totalSimpanan: number;
+    pinjamanAktif: number;
+    omsetToko: number;
   }
-];
+}
 
-const MetricsCards: React.FC = () => {
+const MetricsCards: React.FC<MetricsCardsProps> = ({ metrics: apiMetrics }) => {
+  const displayMetrics = [
+    {
+      title: 'Total Anggota',
+      value: apiMetrics?.totalAnggota?.toLocaleString('id-ID') || '0',
+      trend: 'Total data anggota',
+      isPositive: true,
+      icon: Users,
+      color: 'from-blue-500 to-blue-700'
+    },
+    {
+      title: 'Simpanan Keseluruhan',
+      value: `Rp ${((apiMetrics?.totalSimpanan || 0) / 1000000).toFixed(1)}M`,
+      trend: 'Total saldo simpanan',
+      isPositive: true,
+      icon: Wallet,
+      color: 'from-secondary to-yellow-600'
+    },
+    {
+      title: 'Pinjaman Aktif',
+      value: `Rp ${((apiMetrics?.pinjamanAktif || 0) / 1000000).toFixed(1)}M`,
+      trend: 'Total pinjaman disalurkan',
+      isPositive: true,
+      icon: CreditCard,
+      color: 'from-emerald-500 to-emerald-700'
+    },
+    {
+      title: 'Omset Toko Koperasi',
+      value: `Rp ${((apiMetrics?.omsetToko || 0) / 1000000).toFixed(1)}M`,
+      trend: 'Data bulan ini',
+      isPositive: true,
+      icon: ShoppingBag,
+      color: 'from-purple-500 to-purple-700'
+    }
+  ];
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      {metrics.map((metric, index) => {
+      {displayMetrics.map((metric, index) => {
         const Icon = metric.icon;
         return (
           <div key={index} className="glass-panel p-6 relative overflow-hidden group">

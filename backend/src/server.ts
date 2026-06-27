@@ -9,6 +9,7 @@ import anggotaRoutes from './routes/anggota';
 import simpananRoutes from './routes/simpanan';
 import pinjamanRoutes from './routes/pinjaman';
 import angsuranRoutes from './routes/angsuran';
+import dashboardRoutes from './routes/dashboard';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/anggota', anggotaRoutes);
 app.use('/api/simpanan', simpananRoutes);
 app.use('/api/pinjaman', pinjamanRoutes);
 app.use('/api/angsuran', angsuranRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Root route
 app.get('/', (req, res) => {

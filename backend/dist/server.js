@@ -12,6 +12,8 @@ const auth_1 = __importDefault(require("./routes/auth"));
 const anggota_1 = __importDefault(require("./routes/anggota"));
 const simpanan_1 = __importDefault(require("./routes/simpanan"));
 const pinjaman_1 = __importDefault(require("./routes/pinjaman"));
+const angsuran_1 = __importDefault(require("./routes/angsuran"));
+const dashboard_1 = __importDefault(require("./routes/dashboard"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +27,8 @@ app.use('/api/auth', auth_1.default);
 app.use('/api/anggota', anggota_1.default);
 app.use('/api/simpanan', simpanan_1.default);
 app.use('/api/pinjaman', pinjaman_1.default);
+app.use('/api/angsuran', angsuran_1.default);
+app.use('/api/dashboard', dashboard_1.default);
 // Root route
 app.get('/', (req, res) => {
     res.send('API Koperasi Bakamla RI v2');
