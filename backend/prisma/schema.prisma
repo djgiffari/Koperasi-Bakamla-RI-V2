@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User / Admin
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  role      Role     @default(ADMIN)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  BENDAHARA
+}
+
+// Anggota
+model Anggota {
+  id           Int      @id @default(autoincrement())
+  nip          String?  @unique
+  namaLengkap  String
+  pangkat      String?
+  unitKerja    String?
+  email        String?  @unique
+  noHp         String?
+  rekeningBni  String?
+  fcSkUrl      String?
+  fotoProfilUrl String?
+  status       StatusAnggota @default(AKTIF)
+  password     String? // Password untuk aplikasi mobile anggota
+  
+  simpanan     Simpanan[]
+  pinjaman     Pinjaman[]
+  transaksi    Transaksi[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum StatusAnggota {
+  AKTIF
+  NONAKTIF
+  MENUNGGU_PERSETUJUAN
+}
+
+// Simpanan
+model Simpanan {
+  id           Int      @id @default(autoincrement())
+  anggotaId    Int
+  anggota      Anggota  @relation(fields: [anggotaId], references: [id])
+  jenisSimpanan JenisSimpanan
+  saldo        Float    @default(0)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum JenisSimpanan {
+  POKOK
+  WAJIB
+  SUKARELA
+}
+
+// Pinjaman
+model Pinjaman {
+  id             Int      @id @default(autoincrement())
+  anggotaId      Int
+  anggota        Anggota  @relation(fields: [anggotaId], references: [id])
+  nominal        Float
+  tenor          Int      // Dalam bulan
+  bungaPersen    Float    @default(1.0)
+  status         StatusPinjaman @default(PENDING_ADMIN)
+  fileKtpUrl     String?
+  fileSlipGajiUrl String?
+  
+  tanggalCair    DateTime?
+  
+  angsuran       Angsuran[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum StatusPinjaman {
+  PENDING_ADMIN
+  PENDING_BENDAHARA
+  DICAIRKAN
+  LUNAS
+  DITOLAK
+}
+
+// Angsuran
+model Angsuran {
+  id             Int      @id @default(autoincrement())
+  pinjamanId     Int
+  pinjaman       Pinjaman @relation(fields: [pinjamanId], references: [id])
+  nominal        Float
+  jatuhTempo     DateTime
+  status         StatusAngsuran @default(BELUM_BAYAR)
+  lampiranBuktiUrl String?
+  
+  tanggalBayar   DateTime?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum StatusAngsuran {
+  BELUM_BAYAR
+  MENUNGGU_VERIFIKASI
+  LUNAS
+}
+
+// Transaksi (Pemasukan / Pengeluaran Umum Koperasi)
+model Transaksi {
+  id             Int      @id @default(autoincrement())
+  anggotaId      Int?
+  anggota        Anggota? @relation(fields: [anggotaId], references: [id])
+  jenisTransaksi JenisTransaksi
+  kategori       String
+  nominal        Float
+  keterangan     String?
+  lampiranBuktiUrl String?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum JenisTransaksi {
+  PEMASUKAN
+  PENGELUARAN
+}
+
+// Produk (Toko Koperasi)
+model Produk {
+  id             Int      @id @default(autoincrement())
+  nama           String
+  kategori       String
+  hargaJual      Float
+  hargaModal     Float
+  stok           Int
+  gambarUrl      String?
+  
+  orderItems     OrderItem[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Order (Penjualan / POS)
+model Order {
+  id             Int      @id @default(autoincrement())
+  totalHarga     Float
+  metodePembayaran MetodePembayaran @default(CASH)
+  status         StatusOrder @default(SELESAI)
+  
+  items          OrderItem[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum MetodePembayaran {
+  CASH
+  TRANSFER
+  POTONG_SALDO
+  PAYLATER
+}
+
+enum StatusOrder {
+  PENDING
+  SELESAI
+  BATAL
+}
+
+model OrderItem {
+  id             Int      @id @default(autoincrement())
+  orderId        Int
+  order          Order    @relation(fields: [orderId], references: [id])
+  produkId       Int
+  produk         Produk   @relation(fields: [produkId], references: [id])
+  jumlah         Int
+  hargaSatuan    Float
+}
+
+// Chat (Live Chat)
+model Chat {
+  id             Int      @id @default(autoincrement())
+  pengirimId     String   // Bisa "admin" atau ID anggota
+  penerimaId     String   // Bisa "admin" atau ID anggota
+  pesan          String
+  isRead         Boolean  @default(false)
+  
+  createdAt      DateTime @default(now())
+}
