@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { toast, ToastType } from '../lib/toast';
+import { toast } from '../lib/toast';
+import type { ToastType } from '../lib/toast';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 interface ToastMessage {
