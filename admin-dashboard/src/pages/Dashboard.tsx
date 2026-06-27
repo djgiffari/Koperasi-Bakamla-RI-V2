@@ -9,11 +9,14 @@ const Dashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const data = await api.get('/dashboard');
+        setIsLoading(true);
+        const url = selectedYear ? `/dashboard?year=${selectedYear}` : '/dashboard';
+        const data = await api.get(url);
         setDashboardData(data);
       } catch (error) {
         console.error('Error fetching dashboard:', error);
@@ -22,7 +25,7 @@ const Dashboard: React.FC = () => {
       }
     };
     fetchDashboard();
-  }, []);
+  }, [selectedYear]);
 
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
@@ -34,14 +37,19 @@ const Dashboard: React.FC = () => {
         <p className="text-slate-500 mt-1">Selamat datang kembali, Admin Pusat! Berikut adalah ringkasan operasional hari ini.</p>
       </div>
 
-      {isLoading ? (
+      {isLoading && !dashboardData ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : (
         <>
           <MetricsCards metrics={dashboardData?.metrics} />
-          <DashboardCharts charts={dashboardData?.charts} />
+          <DashboardCharts 
+            charts={dashboardData?.charts} 
+            availableYears={dashboardData?.availableYears}
+            selectedYear={selectedYear}
+            onYearChange={(year) => setSelectedYear(year)}
+          />
           <ActivityTables 
             onOpenModal={handleOpenModal} 
             pendingApprovals={dashboardData?.pendingApprovals}

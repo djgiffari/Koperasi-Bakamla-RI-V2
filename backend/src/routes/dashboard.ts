@@ -62,38 +62,104 @@ router.get('/', async (req: Request, res: Response) => {
     // Calculate cashflow for the last 7 months
     const cashflowData = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
-    const now = new Date();
+    // Cari tanggal transaksi terbaru dan terlama untuk availableYears
+    const lastMutasi = await prisma.mutasiSimpanan.findFirst({ orderBy: { createdAt: 'desc' } });
+    const lastPinjaman = await prisma.pinjaman.findFirst({ orderBy: { createdAt: 'desc' } });
+    const firstMutasi = await prisma.mutasiSimpanan.findFirst({ orderBy: { createdAt: 'asc' } });
+    const firstPinjaman = await prisma.pinjaman.findFirst({ orderBy: { createdAt: 'asc' } });
     
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-      const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      
-      const mutasiMasuk = await prisma.mutasiSimpanan.aggregate({
-        where: { jenisMutasi: 'SETORAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
-        _sum: { nominal: true }
-      });
-      
-      const angsuranMasuk = await prisma.angsuran.aggregate({
-        where: { status: 'LUNAS', updatedAt: { gte: startOfMonth, lte: endOfMonth } },
-        _sum: { totalTagihan: true }
-      });
-      
-      const mutasiKeluar = await prisma.mutasiSimpanan.aggregate({
-        where: { jenisMutasi: 'PENARIKAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
-        _sum: { nominal: true }
-      });
-      
-      const pinjamanKeluar = await prisma.pinjaman.aggregate({
-        where: { status: { in: ['DICAIRKAN', 'LUNAS'] }, createdAt: { gte: startOfMonth, lte: endOfMonth } },
-        _sum: { nominal: true }
-      });
-      
-      cashflowData.push({
-        name: monthNames[d.getMonth()],
-        Pemasukan: (mutasiMasuk._sum.nominal || 0) + (angsuranMasuk._sum.totalTagihan || 0),
-        Pengeluaran: (mutasiKeluar._sum.nominal || 0) + (pinjamanKeluar._sum.nominal || 0)
-      });
+    let now = new Date();
+    if (lastMutasi || lastPinjaman) {
+      const d1 = lastMutasi ? new Date(lastMutasi.createdAt) : new Date(0);
+      const d2 = lastPinjaman ? new Date(lastPinjaman.createdAt) : new Date(0);
+      now = d1 > d2 ? d1 : d2;
+    }
+
+    let minYear = now.getFullYear();
+    if (firstMutasi || firstPinjaman) {
+      const m1 = firstMutasi ? new Date(firstMutasi.createdAt) : new Date();
+      const m2 = firstPinjaman ? new Date(firstPinjaman.createdAt) : new Date();
+      const minDate = m1 < m2 ? m1 : m2;
+      minYear = minDate.getFullYear();
+    }
+    
+    const availableYears = [];
+    for (let y = minYear; y <= now.getFullYear(); y++) {
+      availableYears.push(y);
+    }
+    if (availableYears.length === 0) availableYears.push(now.getFullYear());
+
+    const requestedYear = req.query.year ? parseInt(req.query.year as string) : null;
+    
+    if (requestedYear) {
+      // Return 12 months for the specific year
+      for (let i = 0; i < 12; i++) {
+        const startOfMonth = new Date(requestedYear, i, 1);
+        const endOfMonth = new Date(requestedYear, i + 1, 0, 23, 59, 59, 999);
+        
+        const mutasiMasuk = await prisma.mutasiSimpanan.aggregate({
+          where: { jenisMutasi: 'SETORAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        const angsuranMasuk = await prisma.angsuran.aggregate({
+          where: { status: 'LUNAS', updatedAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { totalTagihan: true }
+        });
+        
+        const mutasiKeluar = await prisma.mutasiSimpanan.aggregate({
+          where: { jenisMutasi: 'PENARIKAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        const pinjamanKeluar = await prisma.pinjaman.aggregate({
+          where: { status: { in: ['DICAIRKAN', 'LUNAS'] }, createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        cashflowData.push({
+          name: `${monthNames[i]} ${requestedYear}`,
+          Pemasukan: (mutasiMasuk._sum.nominal || 0) + (angsuranMasuk._sum.totalTagihan || 0),
+          Simpanan: mutasiMasuk._sum.nominal || 0,
+          Angsuran: angsuranMasuk._sum.totalTagihan || 0,
+          Pengeluaran: (mutasiKeluar._sum.nominal || 0) + (pinjamanKeluar._sum.nominal || 0)
+        });
+      }
+    } else {
+      // Default: Last 7 months relative to 'now'
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+        const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        const mutasiMasuk = await prisma.mutasiSimpanan.aggregate({
+          where: { jenisMutasi: 'SETORAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        const angsuranMasuk = await prisma.angsuran.aggregate({
+          where: { status: 'LUNAS', updatedAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { totalTagihan: true }
+        });
+        
+        const mutasiKeluar = await prisma.mutasiSimpanan.aggregate({
+          where: { jenisMutasi: 'PENARIKAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        const pinjamanKeluar = await prisma.pinjaman.aggregate({
+          where: { status: { in: ['DICAIRKAN', 'LUNAS'] }, createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          _sum: { nominal: true }
+        });
+        
+        cashflowData.push({
+          name: `${monthNames[d.getMonth()]} ${d.getFullYear()}`,
+          Pemasukan: (mutasiMasuk._sum.nominal || 0) + (angsuranMasuk._sum.totalTagihan || 0),
+          Simpanan: mutasiMasuk._sum.nominal || 0,
+          Angsuran: angsuranMasuk._sum.totalTagihan || 0,
+          Pengeluaran: (mutasiKeluar._sum.nominal || 0) + (pinjamanKeluar._sum.nominal || 0)
+        });
+      }
     }
 
     // Generate sales data for the last 7 days (mocking data from Toko module)
@@ -108,19 +174,28 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
+    // Breakdown simpanan
+    const simpananBreakdown = {
+      pokok: allSimpanan.filter(s => s.jenisSimpanan === 'POKOK').reduce((a, b) => a + b.saldo, 0),
+      wajib: allSimpanan.filter(s => s.jenisSimpanan === 'WAJIB').reduce((a, b) => a + b.saldo, 0),
+      sukarela: allSimpanan.filter(s => s.jenisSimpanan === 'SUKARELA').reduce((a, b) => a + b.saldo, 0)
+    };
+
     res.json({
       metrics: {
         totalAnggota,
         totalSimpanan,
         pinjamanAktif,
-        omsetToko: 0 // dummy for now
+        omsetToko: 0, // dummy for now
+        simpananBreakdown
       },
       pendingApprovals,
       recentActivities,
       charts: {
         cashflow: cashflowData,
         sales: salesData
-      }
+      },
+      availableYears
     });
 
   } catch (error) {

@@ -63,6 +63,20 @@ router.get('/saldo/:anggotaId', async (req: Request, res: Response) => {
   }
 });
 
+// GET riwayat mutasi simpanan untuk anggota tertentu
+router.get('/riwayat/:anggotaId', async (req: Request, res: Response) => {
+  try {
+    const anggotaId = parseInt(req.params.anggotaId as string);
+    const mutasi = await prisma.mutasiSimpanan.findMany({
+      where: { anggotaId },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(mutasi);
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal mengambil riwayat simpanan' });
+  }
+});
+
 // POST setor simpanan (Create Mutasi SETORAN) - Used by frontend POST /simpanan
 router.post('/', upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
   try {
