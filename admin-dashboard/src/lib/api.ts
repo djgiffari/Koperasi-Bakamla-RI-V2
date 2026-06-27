@@ -3,7 +3,7 @@
 // namun Traefik biasanya mem-proxy `/api` ke backend.
 // Jika berjalan di lokal (development), biasanya mengarah ke localhost:3000
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export const api = {
   get: async (endpoint: string) => {

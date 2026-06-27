@@ -3,6 +3,7 @@ import { Search, Plus, Trash2, CreditCard, UserCheck, TrendingUp } from 'lucide-
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
+import Pagination from '../components/Pagination';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 
@@ -12,6 +13,11 @@ const Pinjaman: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [subTab, setSubTab] = useState<'workflow' | 'aktif'>('workflow');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Semua');
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -95,9 +101,23 @@ const Pinjaman: React.FC = () => {
   };
 
   // Filter Data
-  const pendingData = dataList.filter(item => ['PENDING_ADMIN', 'PENDING_BENDAHARA'].includes(item.status) && (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
-  const activeData = dataList.filter(item => ['DICAIRKAN', 'LUNAS', 'DITOLAK'].includes(item.status) && (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  // Filter Data
+  const pendingData = dataList.filter(item => {
+    const matchStatusArr = ['PENDING_ADMIN', 'PENDING_BENDAHARA'].includes(item.status);
+    const matchSearch = (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchStatus = statusFilter === 'Semua' || item.status === statusFilter;
+    return matchStatusArr && matchSearch && matchStatus;
+  });
+  
+  const activeData = dataList.filter(item => {
+    const matchStatusArr = ['DICAIRKAN', 'LUNAS', 'DITOLAK'].includes(item.status);
+    const matchSearch = (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchStatus = statusFilter === 'Semua' || item.status === statusFilter;
+    return matchStatusArr && matchSearch && matchStatus;
+  });
+  
   const displayData = subTab === 'workflow' ? pendingData : activeData;
+  const paginatedData = displayData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -128,14 +148,14 @@ const Pinjaman: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/50 bg-white/30 px-6">
           <div className="flex">
             <button
-              onClick={() => setSubTab('workflow')}
+              onClick={() => { setSubTab('workflow'); setStatusFilter('Semua'); setCurrentPage(1); }}
               className={`py-4 mr-6 text-sm font-bold uppercase transition-all relative ${subTab === 'workflow' ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <div className="flex items-center gap-2"><UserCheck size={16}/> Workflow Approval</div>
               {subTab === 'workflow' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-secondary shadow-[0_0_8px_rgba(212,175,55,0.8)]"></div>}
             </button>
             <button
-              onClick={() => setSubTab('aktif')}
+              onClick={() => { setSubTab('aktif'); setStatusFilter('Semua'); setCurrentPage(1); }}
               className={`py-4 text-sm font-bold uppercase transition-all relative ${subTab === 'aktif' ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <div className="flex items-center gap-2"><TrendingUp size={16}/> Pinjaman Aktif</div>
@@ -143,13 +163,34 @@ const Pinjaman: React.FC = () => {
             </button>
           </div>
           
-          <div className="relative py-3 sm:py-0">
-            <Search size={16} className="absolute left-0 sm:left-3 top-5.5 sm:top-2.5 text-slate-400" />
-            <input
-              type="text" placeholder="Cari nama peminjam..."
-              className="w-full sm:w-64 pl-6 sm:pl-9 pr-4 py-2 bg-transparent sm:bg-white/50 border-b sm:border border-slate-200 sm:rounded-lg text-sm outline-none focus:border-secondary transition-colors"
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex items-center gap-2 py-3 sm:py-0">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text" placeholder="Cari nama peminjam..."
+                className="w-full sm:w-64 pl-9 pr-4 py-2 bg-transparent sm:bg-white/50 border border-slate-200 rounded-xl text-sm outline-none focus:border-secondary transition-colors"
+                value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              />
+            </div>
+            <select 
+              className="px-4 py-2 bg-white/70 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold focus:outline-none focus:border-secondary"
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="Semua">Semua Status</option>
+              {subTab === 'workflow' ? (
+                <>
+                  <option value="PENDING_ADMIN">Pending Admin</option>
+                  <option value="PENDING_BENDAHARA">Pending Bendahara</option>
+                </>
+              ) : (
+                <>
+                  <option value="DICAIRKAN">Dicairkan</option>
+                  <option value="LUNAS">Lunas</option>
+                  <option value="DITOLAK">Ditolak</option>
+                </>
+              )}
+            </select>
           </div>
         </div>
 
@@ -162,56 +203,65 @@ const Pinjaman: React.FC = () => {
             <EmptyState icon={CreditCard} title={`Belum ada data ${subTab}`} description="Data pengajuan akan muncul di sini sesuai kategori." />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-primary/5 text-primary text-xs uppercase tracking-wider border-b border-primary/10">
-                  <th className="px-6 py-4 font-bold">Nama Anggota</th>
-                  <th className="px-6 py-4 font-bold">Nominal</th>
-                  <th className="px-6 py-4 font-bold">Tenor</th>
-                  <th className="px-6 py-4 font-bold">Status</th>
-                  <th className="px-6 py-4 font-bold text-center">Aksi / Keputusan</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100/50 text-sm">
-                {displayData.map((item) => (
-                  <tr key={item.id} className="hover:bg-white/40 transition-colors group">
-                    <td className="px-6 py-4 font-semibold text-slate-800">{item.anggota?.namaLengkap || '-'}</td>
-                    <td className="px-6 py-4 font-bold text-secondary">Rp {item.nominal.toLocaleString('id-ID')}</td>
-                    <td className="px-6 py-4 text-slate-600">{item.tenor} bln</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${getStatusColor(item.status)}`}>
-                        {item.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {subTab === 'workflow' ? (
-                        <div className="flex items-center justify-center gap-2">
-                          {item.status === 'PENDING_ADMIN' && (
-                            <button onClick={() => handleActionClick(item.id, 'PENDING_BENDAHARA')} className="px-3 py-1 bg-blue-900 text-blue-100 hover:bg-blue-800 rounded-lg text-[10px] font-semibold transition-colors">
-                              Verifikasi
-                            </button>
-                          )}
-                          {item.status === 'PENDING_BENDAHARA' && (
-                            <button onClick={() => handleActionClick(item.id, 'DICAIRKAN')} className="px-3 py-1 bg-secondary text-primary hover:bg-secondary-hover rounded-lg text-[10px] font-bold transition-colors">
-                              Cairkan Dana
-                            </button>
-                          )}
-                          <button onClick={() => handleActionClick(item.id, 'DITOLAK')} className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg text-[10px] font-semibold transition-colors">
-                            Tolak
-                          </button>
-                        </div>
-                      ) : (
-                        <button onClick={() => handleActionClick(item.id, 'delete')} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Hapus">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-primary/5 text-primary text-xs uppercase tracking-wider border-b border-primary/10">
+                    <th className="px-6 py-4 font-bold">Nama Anggota</th>
+                    <th className="px-6 py-4 font-bold">Nominal</th>
+                    <th className="px-6 py-4 font-bold">Tenor</th>
+                    <th className="px-6 py-4 font-bold">Status</th>
+                    <th className="px-6 py-4 font-bold text-center">Aksi / Keputusan</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200/60 text-sm">
+                  {paginatedData.map((item) => (
+                    <tr key={item.id} className="hover:bg-white/60 transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-slate-800">{item.anggota?.namaLengkap || '-'}</td>
+                      <td className="px-6 py-4 font-bold text-emerald-600">Rp {item.nominal.toLocaleString('id-ID')}</td>
+                      <td className="px-6 py-4 text-slate-600">{item.tenor} bln</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${getStatusColor(item.status)}`}>
+                          {item.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {subTab === 'workflow' ? (
+                          <div className="flex items-center justify-center gap-2">
+                            {item.status === 'PENDING_ADMIN' && (
+                              <button onClick={() => handleActionClick(item.id, 'PENDING_BENDAHARA')} className="px-3 py-1.5 bg-blue-900 text-blue-100 hover:bg-blue-800 rounded-lg text-xs font-semibold transition-colors">
+                                Verifikasi
+                              </button>
+                            )}
+                            {item.status === 'PENDING_BENDAHARA' && (
+                              <button onClick={() => handleActionClick(item.id, 'DICAIRKAN')} className="px-3 py-1.5 bg-secondary text-primary hover:bg-secondary-hover rounded-lg text-xs font-bold transition-colors shadow-sm">
+                                Cairkan Dana
+                              </button>
+                            )}
+                            <button onClick={() => handleActionClick(item.id, 'DITOLAK')} className="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-lg text-xs font-semibold transition-colors">
+                              Tolak
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => handleActionClick(item.id, 'delete')} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Hapus">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination 
+              currentPage={currentPage}
+              totalItems={displayData.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onLimitChange={setItemsPerPage}
+            />
+          </>
         )}
       </div>
 

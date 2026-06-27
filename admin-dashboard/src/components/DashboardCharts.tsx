@@ -12,27 +12,37 @@ import {
   Legend
 } from 'recharts';
 
-const cashflowData = [
-  { name: 'Jan', Pemasukan: 400, Pengeluaran: 240 },
-  { name: 'Feb', Pemasukan: 300, Pengeluaran: 139 },
-  { name: 'Mar', Pemasukan: 200, Pengeluaran: 980 },
-  { name: 'Apr', Pemasukan: 278, Pengeluaran: 390 },
-  { name: 'Mei', Pemasukan: 189, Pengeluaran: 480 },
-  { name: 'Jun', Pemasukan: 239, Pengeluaran: 380 },
-  { name: 'Jul', Pemasukan: 349, Pengeluaran: 430 },
+interface DashboardChartsProps {
+  charts?: {
+    cashflow: any[];
+    sales: any[];
+  }
+}
+
+const defaultCashflowData = [
+  { name: 'Jan', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Feb', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Mar', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Apr', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Mei', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Jun', Pemasukan: 0, Pengeluaran: 0 },
+  { name: 'Jul', Pemasukan: 0, Pengeluaran: 0 },
 ];
 
-const salesData = [
-  { name: 'Sen', Penjualan: 4000 },
-  { name: 'Sel', Penjualan: 3000 },
-  { name: 'Rab', Penjualan: 2000 },
-  { name: 'Kam', Penjualan: 2780 },
-  { name: 'Jum', Penjualan: 1890 },
-  { name: 'Sab', Penjualan: 2390 },
-  { name: 'Min', Penjualan: 3490 },
+const defaultSalesData = [
+  { name: 'Sen', Penjualan: 0 },
+  { name: 'Sel', Penjualan: 0 },
+  { name: 'Rab', Penjualan: 0 },
+  { name: 'Kam', Penjualan: 0 },
+  { name: 'Jum', Penjualan: 0 },
+  { name: 'Sab', Penjualan: 0 },
+  { name: 'Min', Penjualan: 0 },
 ];
 
-const DashboardCharts: React.FC = () => {
+const DashboardCharts: React.FC<DashboardChartsProps> = ({ charts }) => {
+  const cashflowData = charts?.cashflow?.length ? charts.cashflow : defaultCashflowData;
+  const salesData = charts?.sales?.length ? charts.sales : defaultSalesData;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
       {/* Arus Kas Chart */}

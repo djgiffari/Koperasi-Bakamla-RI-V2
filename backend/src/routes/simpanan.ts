@@ -16,6 +16,40 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+// GET all mutasi simpanan (used by Dashboard and Simpanan list)
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const mutasi = await prisma.mutasiSimpanan.findMany({
+      include: { anggota: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    // Map data for frontend
+    const mapped = mutasi.map((m: any) => ({
+      ...m,
+      saldo: m.nominal,
+      kodeAkun: m.keterangan || '-',
+      kodeInvoice: `INV-${m.id.toString().padStart(4, '0')}`
+    }));
+    res.json(mapped);
+  } catch (error) {
+    console.error('Error fetching mutasi:', error);
+    res.status(500).json({ error: 'Gagal mengambil data mutasi simpanan' });
+  }
+});
+
+// GET mutasi simpanan (backward compatibility)
+router.get('/mutasi', async (req: Request, res: Response) => {
+  try {
+    const mutasi = await prisma.mutasiSimpanan.findMany({
+      include: { anggota: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(mutasi);
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal' });
+  }
+});
+
 // GET all balances (Simpanan Induk)
 router.get('/saldo/:anggotaId', async (req: Request, res: Response) => {
   try {
@@ -25,35 +59,20 @@ router.get('/saldo/:anggotaId', async (req: Request, res: Response) => {
     });
     res.json(simpanan);
   } catch (error) {
-    console.error('Error fetching saldo simpanan:', error);
     res.status(500).json({ error: 'Gagal mengambil data saldo simpanan' });
   }
 });
 
-// GET mutasi simpanan
-router.get('/mutasi', async (req: Request, res: Response) => {
+// POST setor simpanan (Create Mutasi SETORAN) - Used by frontend POST /simpanan
+router.post('/', upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
   try {
-    const mutasi = await prisma.mutasiSimpanan.findMany({
-      include: {
-        anggota: true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(mutasi);
-  } catch (error) {
-    console.error('Error fetching mutasi:', error);
-    res.status(500).json({ error: 'Gagal mengambil data mutasi simpanan' });
-  }
-});
-
-// POST setor simpanan (Create Mutasi SETORAN)
-router.post('/setor', upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { anggotaId, jenisSimpanan, nominal, keterangan } = req.body;
+    const { anggotaId, jenisSimpanan, saldo, nominal, kodeAkun, keterangan, tanggal } = req.body;
     
     if (!['POKOK', 'WAJIB', 'SUKARELA'].includes(jenisSimpanan)) {
       return res.status(400).json({ error: 'Jenis simpanan tidak valid' });
     }
+
+    const amount = parseFloat(saldo || nominal || '0');
 
     let buktiUrl = null;
     if (req.file) {
@@ -65,23 +84,24 @@ router.post('/setor', upload.single('buktiFile'), async (req: Request, res: Resp
         anggotaId: parseInt(anggotaId),
         jenisSimpanan: jenisSimpanan as any,
         jenisMutasi: 'SETORAN',
-        nominal: parseFloat(nominal),
-        keterangan: keterangan || null,
+        nominal: amount,
+        keterangan: kodeAkun || keterangan || null,
         buktiUrl: buktiUrl,
         status: 'MENUNGGU_VERIFIKASI',
-        isDivalidasiBank: false
+        isDivalidasiBank: false,
+        createdAt: tanggal ? new Date(tanggal) : undefined
       }
     });
     
-    res.status(201).json({ message: 'Setoran berhasil dicatat dan menunggu verifikasi', data: newMutasi });
+    res.status(201).json({ message: 'Setoran berhasil dicatat', data: newMutasi });
   } catch (error) {
     console.error('Error creating setoran:', error);
     res.status(500).json({ error: 'Gagal menambahkan setoran simpanan' });
   }
 });
 
-// PUT verifikasi mutasi oleh bendahara
-router.put('/mutasi/:id/verifikasi', async (req: Request, res: Response): Promise<any> => {
+// PUT verifikasi mutasi
+router.put('/:id/status', async (req: Request, res: Response): Promise<any> => {
   try {
     const id = parseInt(req.params.id as string);
     const { status, isDivalidasiBank } = req.body;
@@ -90,7 +110,6 @@ router.put('/mutasi/:id/verifikasi', async (req: Request, res: Response): Promis
       return res.status(400).json({ error: 'Status tidak valid' });
     }
 
-    // Transaction to ensure balance is updated if approved
     const updatedMutasi = await prisma.$transaction(async (tx) => {
       const mutasi = await tx.mutasiSimpanan.findUnique({ where: { id } });
       if (!mutasi) throw new Error('Mutasi tidak ditemukan');
@@ -105,23 +124,16 @@ router.put('/mutasi/:id/verifikasi', async (req: Request, res: Response): Promis
       });
 
       if (status === 'DISETUJUI') {
-        // Cari induk simpanan
         let simpananInduk = await tx.simpanan.findFirst({
           where: { anggotaId: mutasi.anggotaId, jenisSimpanan: mutasi.jenisSimpanan }
         });
 
-        // Jika belum ada, buat baru
         if (!simpananInduk) {
           simpananInduk = await tx.simpanan.create({
-            data: {
-              anggotaId: mutasi.anggotaId,
-              jenisSimpanan: mutasi.jenisSimpanan,
-              saldo: 0
-            }
+            data: { anggotaId: mutasi.anggotaId, jenisSimpanan: mutasi.jenisSimpanan, saldo: 0 }
           });
         }
 
-        // Update saldo
         const saldoBaru = mutasi.jenisMutasi === 'SETORAN' 
           ? simpananInduk.saldo + mutasi.nominal
           : simpananInduk.saldo - mutasi.nominal;
@@ -131,7 +143,6 @@ router.put('/mutasi/:id/verifikasi', async (req: Request, res: Response): Promis
           data: { saldo: saldoBaru }
         });
 
-        // Catat ke Jurnal / Kas Koperasi
         const kas = await tx.kasKoperasi.findFirst();
         if (kas) {
            const saldoKasBaru = mutasi.jenisMutasi === 'SETORAN' ? kas.saldo + mutasi.nominal : kas.saldo - mutasi.nominal;
@@ -155,8 +166,18 @@ router.put('/mutasi/:id/verifikasi', async (req: Request, res: Response): Promis
 
     res.json({ message: 'Status mutasi berhasil diupdate', data: updatedMutasi });
   } catch (error: any) {
-    console.error('Error updating status:', error);
     res.status(500).json({ error: error.message || 'Gagal mengubah status mutasi' });
+  }
+});
+
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    await prisma.mutasiSimpanan.delete({
+      where: { id: parseInt(req.params.id as string) }
+    });
+    res.json({ message: 'Deleted' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed' });
   }
 });
 
@@ -165,7 +186,6 @@ router.post('/tarik', async (req: Request, res: Response): Promise<any> => {
   try {
     const { anggotaId, nominal, bankTujuan, rekeningTujuan } = req.body;
     
-    // Cek saldo sukarela
     const simpananSukarela = await prisma.simpanan.findFirst({
       where: { anggotaId: parseInt(anggotaId), jenisSimpanan: 'SUKARELA' }
     });

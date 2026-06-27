@@ -7,8 +7,26 @@ const router = Router();
 // Untuk Admin, kita ingin melihat semua anggota, dengan jumlah pesan belum terbaca dan pesan terakhir.
 router.get('/contacts', async (req: Request, res: Response) => {
   try {
+    // Ambil user ID yang punya riwayat chat dengan admin
+    const chats = await prisma.chat.findMany({
+      where: { OR: [{ pengirimId: 'admin' }, { penerimaId: 'admin' }] },
+      select: { pengirimId: true, penerimaId: true }
+    });
+    
+    const userIds = new Set<number>();
+    chats.forEach(c => {
+      if (c.pengirimId !== 'admin') {
+        const id = parseInt(c.pengirimId);
+        if (!isNaN(id)) userIds.add(id);
+      }
+      if (c.penerimaId !== 'admin') {
+        const id = parseInt(c.penerimaId);
+        if (!isNaN(id)) userIds.add(id);
+      }
+    });
+
     const anggotaList = await prisma.anggota.findMany({
-      where: { status: 'AKTIF' },
+      where: { id: { in: Array.from(userIds) }, status: 'AKTIF' },
       select: { id: true, namaLengkap: true, nip: true, fotoProfilUrl: true }
     });
 
@@ -59,6 +77,22 @@ router.get('/contacts', async (req: Request, res: Response) => {
   }
 });
 
+// GET jumlah chat yang belum terbaca oleh admin (dari seluruh anggota)
+router.get('/unread-count', async (req: Request, res: Response) => {
+  try {
+    const count = await prisma.chat.count({
+      where: {
+        penerimaId: 'admin',
+        isRead: false
+      }
+    });
+    res.json({ count });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    res.status(500).json({ error: 'Gagal mengambil jumlah pesan belum terbaca' });
+  }
+});
+
 // GET riwayat pesan spesifik untuk satu user
 router.get('/:userId', async (req: Request, res: Response) => {
   try {
@@ -87,6 +121,33 @@ router.get('/:userId', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching chat history:', error);
     res.status(500).json({ error: 'Gagal mengambil riwayat pesan' });
+  }
+});
+
+// POST send message
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const { pengirimId, penerimaId, pesan } = req.body;
+    const newChat = await prisma.chat.create({
+      data: {
+        pengirimId: String(pengirimId),
+        penerimaId: String(penerimaId),
+        pesan
+      }
+    });
+
+    // Emit realtime event via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.to(String(penerimaId)).emit('receive_message', newChat);
+      // Juga kirim kembali ke pengirim jika mereka terhubung dari device lain
+      io.to(String(pengirimId)).emit('message_sent', newChat);
+    }
+
+    res.status(201).json(newChat);
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: 'Gagal mengirim pesan' });
   }
 });
 

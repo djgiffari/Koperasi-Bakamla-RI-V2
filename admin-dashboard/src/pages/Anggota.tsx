@@ -3,6 +3,7 @@ import { Users, Search, Edit2, Trash2, Plus, Upload, Download, CreditCard, Chevr
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
+import Pagination from '../components/Pagination';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 
@@ -11,6 +12,11 @@ const Anggota: React.FC = () => {
   const [masterData, setMasterData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Semua');
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Drawer State
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -132,7 +138,15 @@ const Anggota: React.FC = () => {
     }
   };
 
-  const filteredData = anggotaList.filter(a => (a.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredData = anggotaList.filter(a => {
+    const matchSearch = (a.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        (a.nip || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchStatus = statusFilter === 'Semua' || a.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+  
+  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const pangkatOptions = masterData.filter(d => d.kategori === 'PANGKAT');
   const unitKerjaOptions = masterData.filter(d => d.kategori === 'UNIT_KERJA');
 
@@ -158,18 +172,29 @@ const Anggota: React.FC = () => {
             </div>
             <input
               type="text"
-              placeholder="Cari anggota..."
-              className="w-full pl-10 pr-4 py-2 bg-white/70 backdrop-blur border border-white/50 shadow-sm rounded-xl text-sm focus:ring-2 focus:ring-secondary focus:border-secondary outline-none"
+              placeholder="Cari nama atau NIP..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white/70 backdrop-blur border border-white/50 shadow-sm rounded-xl text-sm focus:ring-2 focus:ring-secondary focus:border-secondary outline-none"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             />
           </div>
           
-          <button onClick={handleOpenAdd} className="btn btn-primary flex items-center gap-2 shadow-lg hover:shadow-xl">
+          <select 
+            className="px-4 py-2.5 bg-white/70 backdrop-blur border border-white/50 shadow-sm text-slate-600 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-secondary mr-2"
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+          >
+            <option value="Semua">Semua Status</option>
+            <option value="AKTIF">Aktif</option>
+            <option value="NONAKTIF">Non-Aktif</option>
+            <option value="MENUNGGU_PERSETUJUAN">Menunggu</option>
+          </select>
+          
+          <button onClick={handleOpenAdd} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl hover:bg-primary/90 transition-all">
             <Plus size={16} /> Tambah Baru
           </button>
           
-          <button onClick={() => toast.info('Silakan pilih file CSV/Excel untuk diimpor.')} className="px-4 py-2 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <button onClick={() => toast.info('Silakan pilih file CSV/Excel untuk diimpor.')} className="px-4 py-2.5 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
             <Upload size={18} /> Impor
           </button>
           
@@ -207,43 +232,47 @@ const Anggota: React.FC = () => {
                   <th className="px-4 py-4 font-bold text-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100/50 text-sm">
-                {filteredData.map((row, index) => (
-                  <tr key={row.id} className="hover:bg-white/40 transition-colors align-top">
-                    <td className="px-3 py-3.5 text-slate-500 font-mono">{index + 1}</td>
-                    <td className="px-4 py-3.5">
+              <tbody className="divide-y divide-slate-200/60 text-sm">
+                {paginatedData.map((row, index) => (
+                  <tr key={row.id} className="hover:bg-white/60 transition-colors align-top">
+                    <td className="px-3 py-4 text-slate-500 font-mono">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                    <td className="px-4 py-4">
                       <div className="font-semibold text-slate-800">{row.namaLengkap}</div>
                       <div className="text-slate-500 text-xs mt-1 font-mono">{row.nip || '-'}</div>
                       <div className="text-slate-500 text-xs mt-1">{row.pangkat || '-'}</div>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600">
+                    <td className="px-4 py-4 text-slate-600">
                       <div>{row.tempatLahir || '-'}</div>
                       <div className="text-xs text-slate-400 mt-1">
                         {row.tanggalLahir ? new Date(row.tanggalLahir).toLocaleDateString('id-ID') : '-'}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600">{row.unitKerja || '-'}</td>
-                    <td className="px-4 py-3.5 text-slate-600 text-xs">{row.alamatKantor || '-'}</td>
-                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noKtp || '-'}</td>
-                    <td className="px-4 py-3.5 text-slate-600 text-xs">{row.alamatRumah || '-'}</td>
-                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noHp || '-'}</td>
-                    <td className="px-4 py-3.5 text-slate-600 font-mono">{row.noRekening || row.rekeningBni || '-'}</td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex flex-col items-start gap-1">
+                    <td className="px-4 py-4 text-slate-600">{row.unitKerja || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 text-xs max-w-[150px] truncate" title={row.alamatKantor || ''}>{row.alamatKantor || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 font-mono">{row.noKtp || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 text-xs max-w-[150px] truncate" title={row.alamatRumah || ''}>{row.alamatRumah || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 font-mono">{row.noHp || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 font-mono">{row.noRekening || row.rekeningBni || '-'}</td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col items-start gap-1.5">
                         <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fcSkStatus === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                           {row.fcSkStatus || 'belum'}
                         </span>
                         {row.fcSkUrl && (
-                          <a href={`${BASE_URL}${row.fcSkUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs flex items-center gap-1 mt-1">
-                            <Eye size={12} /> Lihat PDF
+                          <a href={`${BASE_URL}${row.fcSkUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline text-xs flex items-center gap-1 mt-1 font-medium">
+                            <Eye size={14} /> Lihat PDF
                           </a>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => handleOpenEdit(row)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Profil"><Edit2 size={15} /></button>
-                        <button onClick={() => handleDeleteClick(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Anggota"><Trash2 size={15} /></button>
+                        <button onClick={() => handleOpenEdit(row)} className="p-2 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-lg transition-all" title="Edit Profil">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => handleDeleteClick(row.id)} className="p-2 text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all" title="Hapus Anggota">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -251,6 +280,13 @@ const Anggota: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <Pagination 
+            currentPage={currentPage}
+            totalItems={filteredData.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onLimitChange={setItemsPerPage}
+          />
         </div>
       )}
 

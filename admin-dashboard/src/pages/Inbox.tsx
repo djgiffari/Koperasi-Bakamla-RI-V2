@@ -11,12 +11,21 @@ const Inbox: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Pagination for contacts
+  const [page, setPage] = useState(1);
+  const contactsPerPage = 10;
+  
   const socketRef = useRef<Socket | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when chat updates
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   useEffect(() => {
@@ -56,7 +65,10 @@ const Inbox: React.FC = () => {
       // Jika pesan masuk berasal dari kontak yang sedang dibuka, update layar chat
       setActiveContact((currentActive: any) => {
         if (currentActive && (msg.pengirimId === String(currentActive.id) || msg.penerimaId === String(currentActive.id))) {
-          setChatHistory(prev => [...prev, msg]);
+          setChatHistory(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
           
           // Tandai sudah dibaca di backend jika pesan ini untuk admin dan panel chat terbuka
           if (msg.pengirimId !== 'admin') {
@@ -71,7 +83,10 @@ const Inbox: React.FC = () => {
 
     socket.on('message_sent', (msg: any) => {
       // Dipanggil dari backend sebagai echo bahwa pesan berhasil dikirim
-      setChatHistory(prev => [...prev, msg]);
+      setChatHistory(prev => {
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
       fetchContacts();
     });
 
@@ -118,7 +133,7 @@ const Inbox: React.FC = () => {
   return (
     <div className="h-[calc(100vh-140px)] flex bg-white/50 backdrop-blur-md border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
       {/* Sidebar Contacts */}
-      <div className="w-80 border-r border-slate-200 bg-white flex flex-col hidden md:flex">
+      <div className="w-80 border-r border-slate-200 bg-white flex flex-col">
         <div className="p-4 border-b border-slate-100">
           <h2 className="text-xl font-bold text-primary font-outfit mb-4">Inbox Pesan</h2>
           <div className="relative">
@@ -126,7 +141,7 @@ const Inbox: React.FC = () => {
             <input 
               type="text" placeholder="Cari NIP / Nama..." 
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-primary text-sm transition-colors"
             />
           </div>
@@ -136,7 +151,7 @@ const Inbox: React.FC = () => {
           {filteredContacts.length === 0 ? (
             <div className="p-4 text-center text-slate-400 text-sm">Tidak ada kontak ditemukan</div>
           ) : (
-            filteredContacts.map(contact => (
+            filteredContacts.slice((page - 1) * contactsPerPage, page * contactsPerPage).map(contact => (
               <div 
                 key={contact.id}
                 onClick={() => setActiveContact(contact)}
@@ -147,7 +162,7 @@ const Inbox: React.FC = () => {
                     <img src={contact.fotoProfilUrl} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold uppercase">
-                      {contact.name.charAt(0)}
+                      {contact.name?.charAt(0) || '?'}
                     </div>
                   )}
                   {contact.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></div>}
@@ -174,6 +189,27 @@ const Inbox: React.FC = () => {
             ))
           )}
         </div>
+        
+        {/* Pagination Controls */}
+        {filteredContacts.length > contactsPerPage && (
+          <div className="p-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 text-xs">
+            <button 
+              disabled={page === 1} 
+              onClick={() => setPage(p => p - 1)}
+              className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-200 disabled:opacity-50 font-medium"
+            >
+              Sebelummya
+            </button>
+            <span className="text-slate-500 font-medium">Halaman {page} dari {Math.ceil(filteredContacts.length / contactsPerPage)}</span>
+            <button 
+              disabled={page === Math.ceil(filteredContacts.length / contactsPerPage)} 
+              onClick={() => setPage(p => p + 1)}
+              className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-200 disabled:opacity-50 font-medium"
+            >
+              Selanjutnya
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Chat Area */}
@@ -189,10 +225,10 @@ const Inbox: React.FC = () => {
             <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold uppercase">
-                  {activeContact.name.charAt(0)}
+                  {activeContact.name?.charAt(0) || '?'}
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">{activeContact.name}</h3>
+                  <h3 className="font-bold text-slate-800">{activeContact.name || 'Unknown'}</h3>
                   <span className="text-xs text-emerald-600 font-medium">{activeContact.nip}</span>
                 </div>
               </div>
@@ -204,7 +240,7 @@ const Inbox: React.FC = () => {
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4">
               {chatHistory.length === 0 ? (
                 <div className="text-center text-slate-400 text-sm mt-10">Belum ada riwayat pesan. Kirim pesan sekarang!</div>
               ) : (
@@ -225,7 +261,6 @@ const Inbox: React.FC = () => {
                   </div>
                 ))
               )}
-              <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input */}

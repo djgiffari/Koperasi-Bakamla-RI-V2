@@ -371,7 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: LucideIcons.creditCard,
               label: 'Bayar\nAngsuran',
               color: Colors.orange,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AngsuranScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AngsuranScreen(anggotaId: widget.anggotaId ?? 1))),
             ),
             _actionButton(
               icon: LucideIcons.shoppingBag,
@@ -455,7 +455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Estimasi SHU 2026',
                     style: TextStyle(
                       color: AppColors.textMuted,
@@ -548,6 +548,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
+          if (index == 3) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(anggotaId: widget.anggotaId ?? 1, namaLengkap: widget.namaLengkap ?? 'Anggota Koperasi')));
+            return;
+          }
+          if (index == 2) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(userId: widget.anggotaId?.toString() ?? '1')));
+            return; // Don't change index, just open screen
+          }
+          if (index == 1) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const TokoScreen()));
+            return;
+          }
           setState(() {
             _selectedIndex = index;
           });

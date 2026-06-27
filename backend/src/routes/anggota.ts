@@ -115,6 +115,21 @@ router.post('/register', upload.single('ktpFile'), async (req: Request, res: Res
   }
 });
 
+// GET single anggota
+router.get('/:id', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const anggota = await prisma.anggota.findUnique({
+      where: { id }
+    });
+    if (!anggota) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    res.json(anggota);
+  } catch (error) {
+    console.error('Error fetching anggota:', error);
+    res.status(500).json({ error: 'Gagal mengambil data anggota' });
+  }
+});
+
 // PUT update anggota
 router.put('/:id', upload.single('fcSkFile'), async (req: Request, res: Response) => {
   try {
@@ -151,6 +166,33 @@ router.put('/:id', upload.single('fcSkFile'), async (req: Request, res: Response
   } catch (error) {
     console.error('Error updating anggota:', error);
     res.status(500).json({ error: 'Gagal memperbarui data anggota' });
+  }
+});
+
+// PUT update password anggota
+router.put('/:id/password', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { oldPassword, newPassword } = req.body;
+    
+    const anggota = await prisma.anggota.findUnique({ where: { id } });
+    if (!anggota) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    
+    if (anggota.password) {
+      const isMatch = await bcrypt.compare(oldPassword, anggota.password);
+      if (!isMatch) return res.status(400).json({ error: 'PIN lama salah' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.anggota.update({
+      where: { id },
+      data: { password: hashedPassword }
+    });
+    
+    res.json({ message: 'PIN berhasil diperbarui' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ error: 'Gagal memperbarui PIN' });
   }
 });
 

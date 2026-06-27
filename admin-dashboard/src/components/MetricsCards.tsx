@@ -22,7 +22,7 @@ const MetricsCards: React.FC<MetricsCardsProps> = ({ metrics: apiMetrics }) => {
     },
     {
       title: 'Simpanan Keseluruhan',
-      value: `Rp ${((apiMetrics?.totalSimpanan || 0) / 1000000).toFixed(1)}M`,
+      value: `Rp ${(apiMetrics?.totalSimpanan || 0).toLocaleString('id-ID')}`,
       trend: 'Total saldo simpanan',
       isPositive: true,
       icon: Wallet,
@@ -30,7 +30,7 @@ const MetricsCards: React.FC<MetricsCardsProps> = ({ metrics: apiMetrics }) => {
     },
     {
       title: 'Pinjaman Aktif',
-      value: `Rp ${((apiMetrics?.pinjamanAktif || 0) / 1000000).toFixed(1)}M`,
+      value: `Rp ${(apiMetrics?.pinjamanAktif || 0).toLocaleString('id-ID')}`,
       trend: 'Total pinjaman disalurkan',
       isPositive: true,
       icon: CreditCard,
@@ -38,7 +38,7 @@ const MetricsCards: React.FC<MetricsCardsProps> = ({ metrics: apiMetrics }) => {
     },
     {
       title: 'Omset Toko Koperasi',
-      value: `Rp ${((apiMetrics?.omsetToko || 0) / 1000000).toFixed(1)}M`,
+      value: `Rp ${(apiMetrics?.omsetToko || 0).toLocaleString('id-ID')}`,
       trend: 'Data bulan ini',
       isPositive: true,
       icon: ShoppingBag,

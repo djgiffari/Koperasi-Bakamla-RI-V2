@@ -59,6 +59,55 @@ router.get('/', async (req: Request, res: Response) => {
       }))
     ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5);
 
+    // Calculate cashflow for the last 7 months
+    const cashflowData = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+    const now = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+      const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      const mutasiMasuk = await prisma.mutasiSimpanan.aggregate({
+        where: { jenisMutasi: 'SETORAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+        _sum: { nominal: true }
+      });
+      
+      const angsuranMasuk = await prisma.angsuran.aggregate({
+        where: { status: 'LUNAS', updatedAt: { gte: startOfMonth, lte: endOfMonth } },
+        _sum: { totalTagihan: true }
+      });
+      
+      const mutasiKeluar = await prisma.mutasiSimpanan.aggregate({
+        where: { jenisMutasi: 'PENARIKAN', status: 'DISETUJUI', createdAt: { gte: startOfMonth, lte: endOfMonth } },
+        _sum: { nominal: true }
+      });
+      
+      const pinjamanKeluar = await prisma.pinjaman.aggregate({
+        where: { status: { in: ['DICAIRKAN', 'LUNAS'] }, createdAt: { gte: startOfMonth, lte: endOfMonth } },
+        _sum: { nominal: true }
+      });
+      
+      cashflowData.push({
+        name: monthNames[d.getMonth()],
+        Pemasukan: (mutasiMasuk._sum.nominal || 0) + (angsuranMasuk._sum.totalTagihan || 0),
+        Pengeluaran: (mutasiKeluar._sum.nominal || 0) + (pinjamanKeluar._sum.nominal || 0)
+      });
+    }
+
+    // Generate sales data for the last 7 days (mocking data from Toko module)
+    // Karena modul toko belum ada/belum ada transaksi, kita set ke 0
+    const salesData = [];
+    const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      salesData.push({
+        name: dayNames[d.getDay()],
+        Penjualan: 0
+      });
+    }
+
     res.json({
       metrics: {
         totalAnggota,
@@ -67,7 +116,11 @@ router.get('/', async (req: Request, res: Response) => {
         omsetToko: 0 // dummy for now
       },
       pendingApprovals,
-      recentActivities
+      recentActivities,
+      charts: {
+        cashflow: cashflowData,
+        sales: salesData
+      }
     });
 
   } catch (error) {

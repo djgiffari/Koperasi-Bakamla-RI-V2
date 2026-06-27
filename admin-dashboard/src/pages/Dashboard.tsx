@@ -41,7 +41,7 @@ const Dashboard: React.FC = () => {
       ) : (
         <>
           <MetricsCards metrics={dashboardData?.metrics} />
-          <DashboardCharts />
+          <DashboardCharts charts={dashboardData?.charts} />
           <ActivityTables 
             onOpenModal={handleOpenModal} 
             pendingApprovals={dashboardData?.pendingApprovals}

@@ -45,6 +45,7 @@ const io = new SocketIOServer(httpServer, {
     methods: ['GET', 'POST']
   }
 });
+app.set('io', io);
 
 // Middleware
 app.use(express.json());

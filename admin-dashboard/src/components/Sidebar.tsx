@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 import { 
   LayoutDashboard, 
   Users, 
@@ -18,8 +19,25 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   const [openAccordion, setOpenAccordion] = useState<string | null>('transaksi');
+  const [unreadCount, setUnreadCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await api.get('/chat/unread-count');
+        setUnreadCount(res.count);
+      } catch (error) {
+        console.error('Failed to fetch unread count:', error);
+      }
+    };
+    fetchUnreadCount();
+    
+    // Auto-refresh unread count every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -130,7 +148,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                     <MessageSquare size={20} className={isActive ? "text-secondary" : ""} />
                     <span>Inbox Chat</span>
                   </div>
-                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">3</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>
+                  )}
                 </div>
               )}
             </NavLink>

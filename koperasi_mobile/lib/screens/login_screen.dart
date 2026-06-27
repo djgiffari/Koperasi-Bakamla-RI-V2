@@ -87,6 +87,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         _showErrorDialog(data['error'] ?? 'Login gagal');
       }
     } catch (e) {
+      print('Login error: $e');
       _showErrorDialog('Koneksi ke server bermasalah');
     } finally {
       if (mounted) {

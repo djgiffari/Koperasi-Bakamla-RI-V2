@@ -4,11 +4,17 @@ import { CalendarCheck, Search, CheckCircle, Clock, AlertCircle } from 'lucide-r
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Pagination from '../components/Pagination';
 
 const Angsuran: React.FC = () => {
   const [angsuranList, setAngsuranList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Semua');
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [selectedAngsuran, setSelectedAngsuran] = useState<any>(null);
@@ -57,10 +63,14 @@ const Angsuran: React.FC = () => {
 
   const filtered = angsuranList.filter(a => {
     const term = searchTerm.toLowerCase();
-    const nama = a.pinjaman?.anggota?.nama?.toLowerCase() || '';
-    const npp = a.pinjaman?.anggota?.npp?.toLowerCase() || '';
-    return nama.includes(term) || npp.includes(term);
+    const nama = a.pinjaman?.anggota?.namaLengkap?.toLowerCase() || '';
+    const npp = a.pinjaman?.anggota?.nip?.toLowerCase() || '';
+    const matchSearch = nama.includes(term) || npp.includes(term);
+    const matchStatus = statusFilter === 'Semua' || a.status === statusFilter;
+    return matchSearch && matchStatus;
   });
+
+  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   if (loading) return <div className="p-6 text-center text-slate-500 animate-pulse">Memuat data angsuran...</div>;
 
@@ -72,15 +82,28 @@ const Angsuran: React.FC = () => {
           <p className="text-slate-500 mt-1">Pantau pembayaran angsuran anggota setiap bulan.</p>
         </div>
         
-        <div className="relative w-full sm:w-72">
-          <input 
-            type="text" 
-            placeholder="Cari nama atau NPP..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-secondary text-sm shadow-sm" 
-          />
-          <Search size={16} className="absolute left-4 top-2.5 text-slate-400" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64">
+            <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Cari nama atau NIP..." 
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-10 pr-4 py-2 bg-white/70 backdrop-blur border border-slate-200 rounded-xl outline-none focus:border-secondary text-sm shadow-sm transition-colors" 
+            />
+          </div>
+          
+          <select 
+            className="px-4 py-2 bg-white/70 backdrop-blur border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold focus:outline-none focus:border-secondary shadow-sm"
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+          >
+            <option value="Semua">Semua Status</option>
+            <option value="BELUM_DIBAYAR">Belum Dibayar</option>
+            <option value="LUNAS">Lunas</option>
+            <option value="TERLAMBAT">Terlambat</option>
+          </select>
         </div>
       </div>
 
@@ -98,16 +121,16 @@ const Angsuran: React.FC = () => {
                 <th className="px-6 py-4 text-center font-bold">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map(angsuran => {
+            <tbody className="divide-y divide-slate-200/60 text-sm">
+              {paginatedData.map(angsuran => {
                 const isLunas = angsuran.status === 'LUNAS';
                 const isTerlambat = angsuran.status === 'TERLAMBAT';
                 
                 return (
-                  <tr key={angsuran.id} className="hover:bg-white/40">
+                  <tr key={angsuran.id} className="hover:bg-white/60 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800">{angsuran.pinjaman?.anggota?.nama}</div>
-                      <div className="text-[10px] text-slate-500 uppercase">{angsuran.pinjaman?.anggota?.npp}</div>
+                      <div className="font-bold text-slate-800">{angsuran.pinjaman?.anggota?.namaLengkap || '-'}</div>
+                      <div className="text-[10px] text-slate-500 uppercase">{angsuran.pinjaman?.anggota?.nip || '-'}</div>
                     </td>
                     <td className="px-6 py-4 text-center font-bold text-slate-700">
                       {angsuran.bulanKe} / {angsuran.pinjaman?.tenor}
@@ -127,14 +150,14 @@ const Angsuran: React.FC = () => {
                         isTerlambat ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                       }`}>
                         {isLunas ? <CheckCircle size={10} /> : isTerlambat ? <AlertCircle size={10} /> : <Clock size={10} />}
-                        {angsuran.status}
+                        {angsuran.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {!isLunas && (
                         <button 
                           onClick={() => handleBayar(angsuran)} 
-                          className="px-3 py-1 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-light"
+                          className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-light shadow-sm transition-colors"
                         >
                           Bayar Manual
                         </button>
@@ -157,6 +180,13 @@ const Angsuran: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <Pagination 
+          currentPage={currentPage}
+          totalItems={filtered.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onLimitChange={setItemsPerPage}
+        />
       </div>
 
       <ConfirmDialog 
