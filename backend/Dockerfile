@@ -17,7 +17,7 @@ COPY . .
 RUN npx prisma generate
 
 # Build TypeScript to JavaScript
-ENV NODE_OPTIONS="--max_old_space_size=512"
+ENV NODE_OPTIONS="--max_old_space_size=800"
 RUN npm run build
 
 # Expose the API port
