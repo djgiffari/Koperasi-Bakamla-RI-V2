@@ -1,7 +1,14 @@
-import React from 'react';
-import { User, Mail, Shield, Save } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Mail, Shield, Save, CheckCircle } from 'lucide-react';
 
 const ProfilAdmin: React.FC = () => {
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+  const handleSave = () => {
+    // Simulasi penyimpanan
+    setShowSuccessPopup(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between items-start gap-4">
@@ -20,7 +27,7 @@ const ProfilAdmin: React.FC = () => {
             G
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800 font-outfit">Admin Giffari</h2>
+            <h2 className="text-xl font-bold text-white font-outfit">Admin Giffari</h2>
             <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full uppercase tracking-wider">Super Admin</span>
           </div>
         </div>
@@ -64,12 +71,35 @@ const ProfilAdmin: React.FC = () => {
           </div>
 
           <div className="pt-4 flex justify-end">
-            <button onClick={() => alert('Profil berhasil diperbarui!')} className="btn btn-primary flex items-center gap-2">
+            <button onClick={handleSave} className="btn btn-primary flex items-center gap-2">
               <Save size={16} /> Simpan Perubahan
             </button>
           </div>
         </div>
       </div>
+
+      {/* Custom Success Popup Modal */}
+      {showSuccessPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-primary/40 backdrop-blur-sm transition-opacity" 
+            onClick={() => setShowSuccessPopup(false)}
+          ></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center modal-bounce">
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <CheckCircle size={40} />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2 font-outfit">Berhasil!</h3>
+            <p className="text-slate-500 mb-8">Data profil Anda telah berhasil diperbarui ke dalam sistem.</p>
+            <button 
+              onClick={() => setShowSuccessPopup(false)} 
+              className="w-full btn btn-primary"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

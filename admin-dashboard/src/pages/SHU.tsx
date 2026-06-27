@@ -17,24 +17,24 @@ const SHU: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-slate-700">Total Laba Bersih (Tahun Berjalan)</h3>
+            <h3 className="font-bold text-slate-200">Total Laba Bersih (Tahun Berjalan)</h3>
             <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><DollarSign size={20} /></div>
           </div>
-          <h2 className="text-3xl font-bold text-primary">Rp 150.000.000</h2>
+          <h2 className="text-3xl font-bold text-white">Rp 150.000.000</h2>
         </div>
         <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-slate-700">Persentase Alokasi SHU Anggota</h3>
+            <h3 className="font-bold text-slate-200">Persentase Alokasi SHU Anggota</h3>
             <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Calculator size={20} /></div>
           </div>
-          <h2 className="text-3xl font-bold text-primary">40%</h2>
+          <h2 className="text-3xl font-bold text-white">40%</h2>
         </div>
         <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-slate-700">Total Anggota Aktif</h3>
+            <h3 className="font-bold text-slate-200">Total Anggota Aktif</h3>
             <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Users size={20} /></div>
           </div>
-          <h2 className="text-3xl font-bold text-primary">240 Orang</h2>
+          <h2 className="text-3xl font-bold text-white">240 Orang</h2>
         </div>
       </div>
 

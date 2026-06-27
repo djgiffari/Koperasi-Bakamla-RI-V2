@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   };
 
   // Helper function to check if any transaction route is active
-  const isTransactionActive = ['/simpanan', '/pinjaman', '/angsuran'].includes(location.pathname);
+  const isTransactionActive = ['/dashboard/simpanan', '/dashboard/pinjaman', '/dashboard/angsuran'].includes(location.pathname);
   
   // Style generator for NavLink
   const navLinkClass = ({ isActive }: { isActive: boolean }) => 
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
         <ul className="space-y-2">
           {/* Dashboard */}
           <li>
-            <NavLink to="/" className={navLinkClass}>
+            <NavLink to="/dashboard" className={navLinkClass}>
               {({ isActive }) => (
                 <>
                   <LayoutDashboard size={20} className={isActive ? "text-secondary" : ""} />
@@ -82,16 +82,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             
             {openAccordion === 'transaksi' && (
               <ul className="mt-2 ml-10 space-y-1">
-                <li><NavLink to="/simpanan" className={subNavLinkClass}>Simpanan</NavLink></li>
-                <li><NavLink to="/pinjaman" className={subNavLinkClass}>Pinjaman</NavLink></li>
-                <li><NavLink to="/angsuran" className={subNavLinkClass}>Angsuran</NavLink></li>
+                <li><NavLink to="/dashboard/simpanan" className={subNavLinkClass}>Simpanan</NavLink></li>
+                <li><NavLink to="/dashboard/pinjaman" className={subNavLinkClass}>Pinjaman</NavLink></li>
+                <li><NavLink to="/dashboard/angsuran" className={subNavLinkClass}>Angsuran</NavLink></li>
               </ul>
             )}
           </li>
 
           {/* Anggota */}
           <li>
-            <NavLink to="/anggota" className={navLinkClass}>
+            <NavLink to="/dashboard/anggota" className={navLinkClass}>
               {({ isActive }) => (
                 <>
                   <Users size={20} className={isActive ? "text-secondary" : ""} />
@@ -103,7 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
 
           {/* Toko Koperasi */}
           <li>
-            <NavLink to="/pos" className={navLinkClass}>
+            <NavLink to="/dashboard/pos" className={navLinkClass}>
               {({ isActive }) => (
                 <>
                   <Store size={20} className={isActive ? "text-secondary" : ""} />
@@ -115,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
 
           {/* Chat */}
           <li>
-            <NavLink to="/inbox" className={navLinkClass}>
+            <NavLink to="/dashboard/inbox" className={navLinkClass}>
               {({ isActive }) => (
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -132,19 +132,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             <button 
               onClick={() => toggleAccordion('laporan')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-medium transition-colors ${
-                ['/laporan', '/shu'].includes(location.pathname) ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-primary'
+                ['/dashboard/laporan', '/dashboard/shu'].includes(location.pathname) ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-primary'
               }`}
             >
               <div className="flex items-center gap-3">
-                <LayoutDashboard size={20} className={['/laporan', '/shu'].includes(location.pathname) ? "text-secondary" : ""} />
+                <LayoutDashboard size={20} className={['/dashboard/laporan', '/dashboard/shu'].includes(location.pathname) ? "text-secondary" : ""} />
                 <span>Laporan & SHU</span>
               </div>
               {openAccordion === 'laporan' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             </button>
             {openAccordion === 'laporan' && (
               <ul className="mt-2 ml-10 space-y-1">
-                <li><NavLink to="/laporan" className={subNavLinkClass}>Laporan Transaksi</NavLink></li>
-                <li><NavLink to="/shu" className={subNavLinkClass}>Sisa Hasil Usaha</NavLink></li>
+                <li><NavLink to="/dashboard/laporan" className={subNavLinkClass}>Laporan Transaksi</NavLink></li>
+                <li><NavLink to="/dashboard/shu" className={subNavLinkClass}>Sisa Hasil Usaha</NavLink></li>
               </ul>
             )}
           </li>
@@ -154,28 +154,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             <button 
               onClick={() => toggleAccordion('sistem')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-medium transition-colors ${
-                ['/users', '/profil', '/logs', '/broadcast'].includes(location.pathname) ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-primary'
+                ['/dashboard/users', '/dashboard/profil', '/dashboard/logs', '/dashboard/broadcast'].includes(location.pathname) ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-primary'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Settings size={20} className={['/users', '/profil', '/logs', '/broadcast'].includes(location.pathname) ? "text-secondary" : ""} />
+                <Settings size={20} className={['/dashboard/users', '/dashboard/profil', '/dashboard/logs', '/dashboard/broadcast'].includes(location.pathname) ? "text-secondary" : ""} />
                 <span>Sistem & Admin</span>
               </div>
               {openAccordion === 'sistem' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             </button>
             {openAccordion === 'sistem' && (
               <ul className="mt-2 ml-10 space-y-1">
-                <li><NavLink to="/users" className={subNavLinkClass}>Manajemen User</NavLink></li>
-                <li><NavLink to="/profil" className={subNavLinkClass}>Profil Saya</NavLink></li>
-                <li><NavLink to="/broadcast" className={subNavLinkClass}>Broadcast Pesan</NavLink></li>
-                <li><NavLink to="/logs" className={subNavLinkClass}>System Logs</NavLink></li>
+                <li><NavLink to="/dashboard/users" className={subNavLinkClass}>Manajemen User</NavLink></li>
+                <li><NavLink to="/dashboard/profil" className={subNavLinkClass}>Profil Saya</NavLink></li>
+                <li><NavLink to="/dashboard/broadcast" className={subNavLinkClass}>Broadcast Pesan</NavLink></li>
+                <li><NavLink to="/dashboard/logs" className={subNavLinkClass}>System Logs</NavLink></li>
               </ul>
             )}
           </li>
         </ul>
 
         <div className="mt-12 space-y-2 pt-6 border-t border-slate-100">
-          <NavLink to="/settings" className={navLinkClass}>
+          <NavLink to="/dashboard/settings" className={navLinkClass}>
             {({ isActive }) => (
               <>
                 <Settings size={20} className={isActive ? "text-secondary" : ""} />
