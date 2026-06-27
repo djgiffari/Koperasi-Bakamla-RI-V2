@@ -13,7 +13,7 @@ const Settings: React.FC = () => {
   });
 
   const [masterData, setMasterData] = useState<any[]>([]);
-  const [newMaster, setNewMaster] = useState({ kategori: 'PANGKAT', nilai: '' });
+  const [newMaster, setNewMaster] = useState({ kategori: 'JENIS_SIMPANAN', nilai: '' });
 
   const fetchMasterData = async () => {
     try {
@@ -186,6 +186,8 @@ const Settings: React.FC = () => {
                       onChange={(e) => setNewMaster({...newMaster, kategori: e.target.value})}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-secondary text-sm"
                     >
+                      <option value="JENIS_SIMPANAN">Jenis Simpanan</option>
+                      <option value="KODE_AKUN">Kode Akun / Jurnal</option>
                       <option value="PANGKAT">Pangkat / Golongan</option>
                       <option value="UNIT_KERJA">Instansi / Unit Kerja</option>
                     </select>
@@ -205,7 +207,49 @@ const Settings: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Jenis Simpanan List */}
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-700 mb-2">Jenis Simpanan</h4>
+                    <div className="bg-white border border-slate-200 rounded-xl max-h-64 overflow-y-auto">
+                      {masterData.filter(d => d.kategori === 'JENIS_SIMPANAN').length === 0 ? (
+                        <div className="p-4 text-center text-sm text-slate-400">Belum ada data</div>
+                      ) : (
+                        <ul className="divide-y divide-slate-100">
+                          {masterData.filter(d => d.kategori === 'JENIS_SIMPANAN').map(item => (
+                            <li key={item.id} className="p-3 flex justify-between items-center hover:bg-slate-50">
+                              <span className="text-sm font-medium">{item.nilai}</span>
+                              <button type="button" onClick={() => handleDeleteMaster(item.id)} className="text-red-400 hover:text-red-600">
+                                <Trash2 size={16} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Kode Akun List */}
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-700 mb-2">Kode Akun</h4>
+                    <div className="bg-white border border-slate-200 rounded-xl max-h-64 overflow-y-auto">
+                      {masterData.filter(d => d.kategori === 'KODE_AKUN').length === 0 ? (
+                        <div className="p-4 text-center text-sm text-slate-400">Belum ada data</div>
+                      ) : (
+                        <ul className="divide-y divide-slate-100">
+                          {masterData.filter(d => d.kategori === 'KODE_AKUN').map(item => (
+                            <li key={item.id} className="p-3 flex justify-between items-center hover:bg-slate-50">
+                              <span className="text-sm font-medium">{item.nilai}</span>
+                              <button type="button" onClick={() => handleDeleteMaster(item.id)} className="text-red-400 hover:text-red-600">
+                                <Trash2 size={16} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Pangkat List */}
                   <div>
                     <h4 className="font-bold text-sm text-slate-700 mb-2">Daftar Pangkat/Golongan</h4>
