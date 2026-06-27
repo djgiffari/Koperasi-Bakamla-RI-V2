@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, Plus, Trash2, Key } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { toast } from '../lib/toast';
 
 const initialUsers = [
   { id: 'USR-01', username: 'admin1', role: 'Super Admin', name: 'Giffari', lastLogin: 'Hari ini, 10:00' },
@@ -33,7 +34,7 @@ const ManajemenUser: React.FC = () => {
           </h1>
           <p className="text-slate-500 mt-1">Kelola hak akses pengguna Dashboard Koperasi.</p>
         </div>
-        <button onClick={() => alert('Fitur Tambah Admin segera hadir.')} className="btn btn-primary flex items-center gap-2">
+        <button onClick={() => toast.info('Fitur Tambah Admin segera hadir.')} className="btn btn-primary flex items-center gap-2">
           <Plus size={16} /> Tambah Admin
         </button>
       </div>
@@ -66,7 +67,7 @@ const ManajemenUser: React.FC = () => {
                   <td className="px-6 py-4 text-slate-500 text-xs">{user.lastLogin}</td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => alert('Fitur Reset Password segera hadir.')} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Reset Password">
+                      <button onClick={() => toast.info('Fitur Reset Password segera hadir.')} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Reset Password">
                         <Key size={16} />
                       </button>
                       <button onClick={() => handleDelete(user.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Hapus User">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FileText, Download, Calendar, Filter, PieChart } from 'lucide-react';
+import { FileText, Download, Calendar, Filter, PieChart, TrendingUp } from 'lucide-react';
+import { toast } from '../lib/toast';
 import EmptyState from '../components/EmptyState';
 
 const Laporan: React.FC = () => {
@@ -43,10 +44,10 @@ const Laporan: React.FC = () => {
           </div>
 
           <div className="pt-2">
-            <button onClick={() => alert('Memproses data laporan...')} className="w-full btn btn-primary flex justify-center items-center gap-2">
+            <button onClick={() => toast.info('Memproses data laporan...')} className="w-full btn btn-primary flex justify-center items-center gap-2">
               <PieChart size={14} /> Generate Data
             </button>
-            <button onClick={() => alert('Laporan berhasil diunduh ke format Excel.')} className="w-full mt-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-bold py-2 rounded-xl text-sm flex justify-center items-center gap-2 transition-colors">
+            <button onClick={() => toast.success('Laporan berhasil diunduh ke format Excel.')} className="w-full mt-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-bold py-2 rounded-xl text-sm flex justify-center items-center gap-2 transition-colors">
               <Download size={14} /> Unduh Excel
             </button>
           </div>

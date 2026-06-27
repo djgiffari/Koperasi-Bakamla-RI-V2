@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShoppingBag, Plus, Trash2, Edit2, Package, ListTree, Box, ShoppingCart, Calculator, MonitorPlay } from 'lucide-react';
+import { toast } from '../lib/toast';
 import Drawer from '../components/Drawer';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -100,16 +101,16 @@ const POS: React.FC = () => {
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      alert("Keranjang kosong!");
+      toast.error("Keranjang kosong!");
       return;
     }
     if (cashVal < cartTotal) {
-      alert("Uang tunai kurang!");
+      toast.error("Uang tunai kurang!");
       return;
     }
     setConfirmMessage(`Checkout transaksi senilai Rp ${cartTotal.toLocaleString('id-ID')}?`);
     setConfirmAction(() => () => {
-      alert("Transaksi Berhasil!");
+      toast.success("Transaksi Berhasil!");
       setCart([]);
       setCashAmount('');
     });

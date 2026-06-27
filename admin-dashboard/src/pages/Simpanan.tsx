@@ -4,6 +4,7 @@ import Drawer from '../components/Drawer';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 
 const Simpanan: React.FC = () => {
   const [dataList, setDataList] = useState<any[]>([]);
@@ -28,7 +29,7 @@ const Simpanan: React.FC = () => {
       setAnggotaList(anggotaData);
     } catch (error) {
       console.error('Error fetching data:', error);
-      alert('Gagal mengambil data simpanan.');
+      toast.error('Gagal mengambil data simpanan.');
     } finally {
       setIsLoading(false);
     }
@@ -50,16 +51,17 @@ const Simpanan: React.FC = () => {
       setDataList(dataList.filter(item => item.id !== deleteId));
       setIsConfirmOpen(false);
       setDeleteId(null);
+      toast.success('Simpanan berhasil dihapus');
     } catch (error) {
       console.error('Error deleting simpanan:', error);
-      alert('Gagal menghapus simpanan');
+      toast.error('Gagal menghapus simpanan');
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.anggotaId) {
-      alert('Pilih anggota terlebih dahulu');
+      toast.error('Pilih anggota terlebih dahulu');
       return;
     }
     
@@ -73,9 +75,10 @@ const Simpanan: React.FC = () => {
       await api.post('/simpanan', payload);
       setIsDrawerOpen(false);
       fetchData(); // Refresh data
+      toast.success('Simpanan berhasil ditambahkan');
     } catch (error) {
       console.error('Error saving simpanan:', error);
-      alert('Gagal menyimpan data simpanan');
+      toast.error('Gagal menyimpan data simpanan');
     }
   };
 

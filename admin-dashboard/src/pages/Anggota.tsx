@@ -4,6 +4,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
 import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 
 const Anggota: React.FC = () => {
   const [anggotaList, setAnggotaList] = useState<any[]>([]);
@@ -31,7 +32,7 @@ const Anggota: React.FC = () => {
       setAnggotaList(data);
     } catch (error) {
       console.error('Error fetching anggota:', error);
-      alert('Gagal mengambil data anggota.');
+      // toast.error('Gagal mengambil data anggota.');
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +71,10 @@ const Anggota: React.FC = () => {
       setAnggotaList(anggotaList.filter(a => a.id !== deleteId));
       setIsConfirmOpen(false); // Fix freeze bug!
       setDeleteId(null);
+      toast.success('Anggota berhasil dihapus');
     } catch (error) {
       console.error('Error deleting anggota:', error);
-      alert('Gagal menghapus anggota');
+      toast.error('Gagal menghapus anggota');
     }
   };
 
@@ -96,9 +98,10 @@ const Anggota: React.FC = () => {
       
       setIsDrawerOpen(false);
       fetchAnggota(); // Refresh data
+      toast.success('Anggota berhasil disimpan');
     } catch (error) {
       console.error('Error saving anggota:', error);
-      alert('Gagal menyimpan data anggota');
+      toast.error('Gagal menyimpan data anggota');
     }
   };
 
@@ -135,11 +138,11 @@ const Anggota: React.FC = () => {
             <Plus size={16} /> Tambah Baru
           </button>
           
-          <button onClick={() => alert('Silakan pilih file CSV/Excel untuk diimpor.')} className="px-4 py-2 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
-            <Upload size={16} /> Impor
+          <button onClick={() => toast.info('Silakan pilih file CSV/Excel untuk diimpor.')} className="px-4 py-2 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
+            <Upload size={18} /> Impor
           </button>
           
-          <button onClick={() => alert('Mengekspor data ke CSV/Excel...')} className="px-4 py-2 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <button onClick={() => toast.info('Mengekspor data ke CSV/Excel...')} className="px-4 py-2 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
             <Download size={16} /> Ekspor
           </button>
         </div>

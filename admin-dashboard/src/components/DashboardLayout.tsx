@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import ToastContainer from './ToastContainer';
 
 const DashboardLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -12,6 +13,7 @@ const DashboardLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
+      <ToastContainer />
       {/* 3D Abstract Backgrounds matching Landing Page */}
       <div className="bg-shape shape-1"></div>
       <div className="bg-shape shape-2"></div>

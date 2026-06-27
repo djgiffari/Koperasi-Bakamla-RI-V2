@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Settings as SettingsIcon, Building, Percent, Shield, Save } from 'lucide-react';
+import { toast } from '../lib/toast';
 import { Link } from 'react-router-dom';
 
 const Settings: React.FC = () => {
@@ -12,7 +13,7 @@ const Settings: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Pengaturan berhasil disimpan!');
+    toast.success('Pengaturan berhasil disimpan!');
   };
 
   return (

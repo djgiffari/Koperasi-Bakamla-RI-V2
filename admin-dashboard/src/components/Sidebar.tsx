@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
@@ -19,6 +19,14 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   const [openAccordion, setOpenAccordion] = useState<string | null>('transaksi');
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    localStorage.removeItem('koperasi_token');
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
 
   const toggleAccordion = (name: string) => {
     setOpenAccordion(openAccordion === name ? null : name);
@@ -183,7 +191,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
               </>
             )}
           </NavLink>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg font-medium transition-colors" onClick={(e) => {e.preventDefault(); alert('Logout');}}>
+          <a href="#" className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg font-medium transition-colors" onClick={handleLogout}>
             <LogOut size={20} />
             <span>Keluar</span>
           </a>

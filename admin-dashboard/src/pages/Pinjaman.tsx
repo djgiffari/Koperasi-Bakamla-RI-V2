@@ -4,6 +4,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
 import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 
 const Pinjaman: React.FC = () => {
   const [dataList, setDataList] = useState<any[]>([]);
@@ -30,7 +31,7 @@ const Pinjaman: React.FC = () => {
       setAnggotaList(anggotaData);
     } catch (error) {
       console.error('Error fetching data:', error);
-      alert('Gagal mengambil data pinjaman.');
+      // toast.error('Gagal mengambil data pinjaman.');
     } finally {
       setIsLoading(false);
     }
@@ -63,16 +64,17 @@ const Pinjaman: React.FC = () => {
       setIsConfirmOpen(false);
       setActionData(null);
       fetchData(); // Refresh data
+      toast.success('Berhasil memproses aksi pinjaman');
     } catch (error) {
-      console.error('Error in action:', error);
-      alert('Gagal memproses aksi');
+      console.error('Error handling pinjaman action:', error);
+      toast.error('Gagal memproses aksi');
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.anggotaId) {
-      alert('Pilih anggota terlebih dahulu');
+      toast.error('Pilih anggota terlebih dahulu');
       return;
     }
     try {
@@ -85,9 +87,10 @@ const Pinjaman: React.FC = () => {
       await api.post('/pinjaman', payload);
       setIsDrawerOpen(false);
       fetchData(); // Refresh data
+      toast.success('Pinjaman berhasil ditambahkan');
     } catch (error) {
       console.error('Error saving pinjaman:', error);
-      alert('Gagal menyimpan data pinjaman');
+      toast.error('Gagal menyimpan data pinjaman');
     }
   };
 
