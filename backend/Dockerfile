@@ -8,7 +8,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm install
+RUN npm install --include=dev
 
 # Copy application source code
 COPY . .
