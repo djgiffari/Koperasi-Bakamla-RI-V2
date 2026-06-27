@@ -60,7 +60,7 @@ const Inbox: React.FC = () => {
           
           // Tandai sudah dibaca di backend jika pesan ini untuk admin dan panel chat terbuka
           if (msg.pengirimId !== 'admin') {
-            api.put(`/chat/read/${msg.id}`).catch(console.error);
+            api.put(`/chat/read/${msg.id}`, {}).catch(console.error);
           }
         }
         return currentActive;
