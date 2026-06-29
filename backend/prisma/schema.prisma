@@ -234,13 +234,18 @@ model JurnalUmum {
   id              Int            @id @default(autoincrement())
   tanggal         DateTime       @default(now())
   keterangan      String
-  jenis           JenisTransaksi
+  jenis           JenisJurnal
   nominal         Float
   saldoSetelahnya Float
   referensiId     String? // ID transaksi terkait (Misal ID Pinjaman, Mutasi)
   tipeReferensi   String? // 'PINJAMAN', 'SIMPANAN', 'ORDER', dsb
 
   createdAt DateTime @default(now())
+}
+
+enum JenisJurnal {
+  DEBIT
+  KREDIT
 }
 
 // Transaksi Umum (Lain-lain)
