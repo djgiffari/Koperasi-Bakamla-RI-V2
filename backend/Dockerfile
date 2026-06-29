@@ -25,4 +25,4 @@ EXPOSE 3000
 
 # Command to run the application
 # We use a shell script inline to push migrations before starting the server
-CMD npx prisma db push && npm start
+CMD npx prisma db push --accept-data-loss && npm start
