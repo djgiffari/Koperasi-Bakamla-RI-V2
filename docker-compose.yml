@@ -12,6 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/backup_lokal.sql:/backup_lokal.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d koperasi_v3"]
       interval: 5s
