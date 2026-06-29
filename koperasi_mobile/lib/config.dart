@@ -2,7 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class ApiConfig {
+  // Set to false if you want to test on local server (localhost)
+  static const bool isProduction = true;
+
   static String get baseUrl {
+    if (isProduction) {
+      // Pastikan URL ini sesuai dengan konfigurasi backend Anda (https://kpri.online/api atau https://api.kpri.online)
+      return 'https://kpri.online/api';
+    }
+
     // If running on web browser, use localhost
     if (kIsWeb) {
       return 'http://localhost:3000/api';
