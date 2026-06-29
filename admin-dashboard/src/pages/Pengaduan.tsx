@@ -189,7 +189,7 @@ const PengaduanPage = () => {
                 <div className="mt-3">
                   <span className="text-gray-500 text-xs block mb-1">Lampiran Bukti</span>
                   <a 
-                    href={`http://localhost:3000${selectedPengaduan.lampiranUrl}`} 
+                    href={`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000'}${selectedPengaduan.lampiranUrl}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded border border-blue-100 hover:bg-blue-100 transition-colors text-sm"
