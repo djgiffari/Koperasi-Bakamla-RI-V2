@@ -19,9 +19,39 @@ const router = (0, express_1.Router)();
 router.get('/estimasi/:anggotaId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const anggotaId = parseInt(req.params.anggotaId);
-        // 1. Ambil Total Kas / Laba Koperasi saat ini (Sederhananya: Saldo KasKoperasi - Total Simpanan Pokok & Wajib)
-        const kas = yield prisma_1.default.kasKoperasi.findFirst();
-        const totalShuBerjalan = kas ? kas.saldo * 0.2 : 0; // Simulasi 20% Kas adalah SHU Koperasi
+        // 1. Hitung Laba Kotor (Total Pemasukan Murni)
+        const currentYear = new Date().getFullYear();
+        const startDate = new Date(`${currentYear}-01-01`);
+        const endDate = new Date(`${currentYear}-12-31`);
+        // A. Pemasukan dari Pinjaman (Bunga & Denda yang sudah dibayar)
+        const angsuranLunas = yield prisma_1.default.angsuran.aggregate({
+            where: { status: 'LUNAS', tanggalBayar: { gte: startDate, lte: endDate } },
+            _sum: { nominalBunga: true, dendaKeterlambatan: true }
+        });
+        const pendapatanBunga = (angsuranLunas._sum.nominalBunga || 0) + (angsuranLunas._sum.dendaKeterlambatan || 0);
+        // B. Pemasukan dari Potongan Biaya Pinjaman (Cair tahun ini)
+        const pinjamanCair = yield prisma_1.default.pinjaman.aggregate({
+            where: { status: 'DICAIRKAN', tanggalCair: { gte: startDate, lte: endDate } },
+            _sum: { biayaAdmin: true, biayaAsuransi: true }
+        });
+        const pendapatanBiayaPinjaman = (pinjamanCair._sum.biayaAdmin || 0) + (pinjamanCair._sum.biayaAsuransi || 0);
+        // C. Pemasukan dari Margin Toko Koperasi
+        // Harus iterasi order items karena harga Modal ada di Produk
+        const orderSelesai = yield prisma_1.default.orderItem.findMany({
+            where: { order: { status: 'SELESAI', createdAt: { gte: startDate, lte: endDate } } },
+            include: { produk: true }
+        });
+        const pendapatanToko = orderSelesai.reduce((acc, item) => {
+            const margin = item.hargaSatuan - item.produk.hargaModal;
+            return acc + (margin * item.jumlah);
+        }, 0);
+        // D. Pengaturan Biaya Operasional & Persentase SHU dari Admin
+        const setOperasional = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_OPERASIONAL_TAHUNAN' } });
+        const biayaOperasional = setOperasional ? parseFloat(setOperasional.nilai) : 0;
+        const setPersenShu = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'PERSENTASE_SHU_DIBAGIKAN' } });
+        const persenShuDibagikan = setPersenShu ? parseFloat(setPersenShu.nilai) / 100 : 0.8; // default 80% laba dibagikan
+        const totalLabaBersih = pendapatanBunga + pendapatanBiayaPinjaman + pendapatanToko - biayaOperasional;
+        const totalShuBerjalan = totalLabaBersih > 0 ? totalLabaBersih * persenShuDibagikan : 0;
         // Parameter pembagian (misal: Jasa Modal 40%, Jasa Anggota 60%)
         const porsiJasaModal = 0.4;
         const porsiJasaAnggota = 0.6;
@@ -67,7 +97,78 @@ router.get('/estimasi/:anggotaId', (req, res) => __awaiter(void 0, void 0, void 
         res.status(500).json({ error: 'Gagal mengkalkulasi estimasi SHU' });
     }
 }));
-// POST Distribusi SHU Tahunan (Oleh Pengawas / Ketua)
+// GET Simulasi SHU Global (Untuk Admin Dashboard)
+router.get('/simulasi', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const currentYear = new Date().getFullYear();
+        const startDate = new Date(`${currentYear}-01-01`);
+        const endDate = new Date(`${currentYear}-12-31`);
+        // A. Pemasukan Pinjaman
+        const angsuranLunas = yield prisma_1.default.angsuran.aggregate({
+            where: { status: 'LUNAS', tanggalBayar: { gte: startDate, lte: endDate } },
+            _sum: { nominalBunga: true, dendaKeterlambatan: true }
+        });
+        const pendapatanBunga = (angsuranLunas._sum.nominalBunga || 0) + (angsuranLunas._sum.dendaKeterlambatan || 0);
+        // B. Pemasukan Biaya
+        const pinjamanCair = yield prisma_1.default.pinjaman.aggregate({
+            where: { status: 'DICAIRKAN', tanggalCair: { gte: startDate, lte: endDate } },
+            _sum: { biayaAdmin: true, biayaAsuransi: true }
+        });
+        const pendapatanBiayaPinjaman = (pinjamanCair._sum.biayaAdmin || 0) + (pinjamanCair._sum.biayaAsuransi || 0);
+        // C. Pemasukan Toko
+        const orderSelesai = yield prisma_1.default.orderItem.findMany({
+            where: { order: { status: 'SELESAI', createdAt: { gte: startDate, lte: endDate } } },
+            include: { produk: true }
+        });
+        const pendapatanToko = orderSelesai.reduce((acc, item) => acc + ((item.hargaSatuan - item.produk.hargaModal) * item.jumlah), 0);
+        // D. Pengaturan
+        const setOperasional = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_OPERASIONAL_TAHUNAN' } });
+        const biayaOperasional = setOperasional ? parseFloat(setOperasional.nilai) : 0;
+        const setPersenShu = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'PERSENTASE_SHU_DIBAGIKAN' } });
+        const persenShuDibagikan = setPersenShu ? parseFloat(setPersenShu.nilai) : 80;
+        const totalLabaBersih = pendapatanBunga + pendapatanBiayaPinjaman + pendapatanToko - biayaOperasional;
+        const totalShuBerjalan = totalLabaBersih > 0 ? totalLabaBersih * (persenShuDibagikan / 100) : 0;
+        // Total metrics Koperasi
+        const anggotaAktif = yield prisma_1.default.anggota.count({ where: { status: 'AKTIF' } });
+        const semuaSimpanan = yield prisma_1.default.simpanan.aggregate({ _sum: { saldo: true } });
+        const totalSimpananKoperasi = semuaSimpanan._sum.saldo || 1;
+        const pinjamanSemua = yield prisma_1.default.pinjaman.aggregate({ where: { status: 'DICAIRKAN' }, _sum: { nominal: true } });
+        const orderSemua = yield prisma_1.default.order.aggregate({ _sum: { totalHarga: true } });
+        const totalTransaksiKoperasi = (pinjamanSemua._sum.nominal || 0) + (orderSemua._sum.totalHarga || 0) || 1;
+        // Hitung per anggota (Top 50 untuk simulasi UI agar tidak berat)
+        const anggotaList = yield prisma_1.default.anggota.findMany({ where: { status: 'AKTIF' }, take: 50 });
+        const porsiJasaModal = 0.4;
+        const porsiJasaAnggota = 0.6;
+        const simulasiAnggota = yield Promise.all(anggotaList.map((agt) => __awaiter(void 0, void 0, void 0, function* () {
+            // Jasa Modal
+            const simpanan = yield prisma_1.default.simpanan.findMany({ where: { anggotaId: agt.id } });
+            const saldo = simpanan.reduce((a, c) => a + c.saldo, 0);
+            const jm = (saldo / totalSimpananKoperasi) * (totalShuBerjalan * porsiJasaModal);
+            // Jasa Anggota
+            const pinj = yield prisma_1.default.pinjaman.aggregate({ where: { anggotaId: agt.id, status: 'DICAIRKAN' }, _sum: { nominal: true } });
+            const ord = yield prisma_1.default.order.aggregate({ where: { tagihanPaylater: { anggotaId: agt.id } }, _sum: { totalHarga: true } });
+            const trx = (pinj._sum.nominal || 0) + (ord._sum.totalHarga || 0);
+            const ja = (trx / totalTransaksiKoperasi) * (totalShuBerjalan * porsiJasaAnggota);
+            return {
+                id: agt.id,
+                nama: agt.namaLengkap,
+                poinSimpanan: saldo,
+                poinTransaksi: trx,
+                estimasiShu: jm + ja
+            };
+        })));
+        res.json({
+            totalLabaBersih,
+            persenShuDibagikan,
+            anggotaAktif,
+            simulasi: simulasiAnggota
+        });
+    }
+    catch (error) {
+        console.error('Error global simulasi SHU:', error);
+        res.status(500).json({ error: 'Gagal mengkalkulasi simulasi SHU global' });
+    }
+}));
 router.post('/distribusi', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { tahun, totalSHUKotor, persenCadangan, persenPengurus, persenPendidikan, persenJasaModal, persenJasaAnggota } = req.body;

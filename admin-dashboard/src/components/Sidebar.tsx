@@ -139,21 +139,42 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             </NavLink>
           </li>
 
-          {/* Chat */}
+          {/* Komunikasi (Chat, Pengaduan, Broadcast) */}
           <li>
-            <NavLink to="/dashboard/inbox" className={navLinkClass}>
-              {({ isActive }) => (
-                <div className="w-full flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <MessageSquare size={20} className={isActive ? "text-secondary" : ""} />
-                    <span>Inbox Chat</span>
-                  </div>
+            <button 
+              onClick={() => toggleAccordion('komunikasi')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-medium transition-colors ${
+                ['/dashboard/inbox', '/dashboard/pengaduan', '/dashboard/broadcast'].includes(location.pathname) ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-primary'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <MessageSquare size={20} className={['/dashboard/inbox', '/dashboard/pengaduan', '/dashboard/broadcast'].includes(location.pathname) ? "text-secondary" : ""} />
                   {unreadCount > 0 && (
-                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
                   )}
                 </div>
-              )}
-            </NavLink>
+                <span>Komunikasi</span>
+              </div>
+              {openAccordion === 'komunikasi' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+            {openAccordion === 'komunikasi' && (
+              <ul className="mt-2 ml-10 space-y-1">
+                <li>
+                  <NavLink to="/dashboard/inbox" className={subNavLinkClass}>
+                    <div className="flex justify-between items-center w-full">
+                      <span>Inbox Chat</span>
+                      {unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{unreadCount}</span>}
+                    </div>
+                  </NavLink>
+                </li>
+                <li><NavLink to="/dashboard/pengaduan" className={subNavLinkClass}>Pengaduan / Keluhan</NavLink></li>
+                <li><NavLink to="/dashboard/broadcast" className={subNavLinkClass}>Broadcast Pesan</NavLink></li>
+              </ul>
+            )}
           </li>
           {/* Laporan & SHU */}
           <li>
@@ -195,7 +216,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
               <ul className="mt-2 ml-10 space-y-1">
                 <li><NavLink to="/dashboard/users" className={subNavLinkClass}>Manajemen User</NavLink></li>
                 <li><NavLink to="/dashboard/profil" className={subNavLinkClass}>Profil Saya</NavLink></li>
-                <li><NavLink to="/dashboard/broadcast" className={subNavLinkClass}>Broadcast Pesan</NavLink></li>
                 <li><NavLink to="/dashboard/logs" className={subNavLinkClass}>System Logs</NavLink></li>
               </ul>
             )}

@@ -1,104 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import '../utils/api_service.dart';
+import 'dart:convert';
+import 'package:intl/intl.dart';
+
 import '../theme/colors.dart';
 import '../config.dart';
+import 'pengajuan_pinjaman_screen.dart';
+import 'detail_pinjaman_screen.dart';
 
 class PinjamanScreen extends StatefulWidget {
-  const PinjamanScreen({super.key});
+  final int anggotaId;
+  const PinjamanScreen({super.key, required this.anggotaId});
 
   @override
   State<PinjamanScreen> createState() => _PinjamanScreenState();
 }
 
 class _PinjamanScreenState extends State<PinjamanScreen> {
-  final _nominalController = TextEditingController();
-  final _tenorController = TextEditingController();
-  final String _skemaBunga = 'FLAT';
-  
-  XFile? _ktpFile;
-  XFile? _slipGajiFile;
-  bool _isLoading = false;
-  final ImagePicker _picker = ImagePicker();
+  bool _isLoading = true;
+  List<dynamic> _pinjamanList = [];
+  double _totalSimpanan = 0;
+  double _plafon = 0;
 
-  Future<void> _pickFile(bool isKtp) async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        if (isKtp) {
-          _ktpFile = image;
-        } else {
-          _slipGajiFile = image;
-        }
-      });
-    }
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
   }
 
-  Future<void> _submitPinjaman() async {
-    if (_nominalController.text.isEmpty || _tenorController.text.isEmpty) {
-      _showDialog('Error', 'Harap isi nominal dan tenor pinjaman');
-      return;
-    }
-    if (_ktpFile == null || _slipGajiFile == null) {
-      _showDialog('Error', 'Harap lampirkan KTP dan Slip Gaji');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}/pinjaman'));
-      request.fields['anggotaId'] = '1'; // Default dummy anggotaId
-      request.fields['nominal'] = _nominalController.text.replaceAll(RegExp(r'[^0-9]'), '');
-      request.fields['tenor'] = _tenorController.text;
-      request.fields['skemaBunga'] = _skemaBunga;
-
-      if (_ktpFile != null) {
-        request.files.add(await http.MultipartFile.fromPath('ktpFile', _ktpFile!.path));
-      }
-      if (_slipGajiFile != null) {
-        request.files.add(await http.MultipartFile.fromPath('slipGajiFile', _slipGajiFile!.path));
+      // Fetch Dashboard for Plafon (total simpanan * 3 logic handled locally for display if needed, but we can fetch real plafon if API provides it)
+      final resDash = await ApiService.get(Uri.parse('${ApiConfig.baseUrl}/dashboard/mobile/${widget.anggotaId}'));
+      if (resDash.statusCode == 200) {
+        final data = jsonDecode(resDash.body);
+        _totalSimpanan = (data['totalSimpanan'] as num?)?.toDouble() ?? 0;
+        _plafon = _totalSimpanan * 3; // Estimasi plafon (Bisa disesuaikan dengan setting backend)
       }
 
-      var response = await request.send();
-      var responseData = await response.stream.bytesToString();
-
-      if (response.statusCode == 201) {
-        _showDialog('Sukses', 'Pengajuan pinjaman berhasil! Menunggu persetujuan Admin.', isSuccess: true);
-      } else {
-        _showDialog('Gagal', 'Terjadi kesalahan: $responseData');
+      // Fetch list pinjaman
+      final resPinjaman = await ApiService.get(Uri.parse('${ApiConfig.baseUrl}/pinjaman/mobile/${widget.anggotaId}'));
+      if (resPinjaman.statusCode == 200) {
+        _pinjamanList = jsonDecode(resPinjaman.body);
       }
     } catch (e) {
-      print('Error submit pinjaman: $e');
-      _showDialog('Error', 'Koneksi ke server bermasalah');
+      debugPrint('Error fetching pinjaman: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showDialog(String title, String message, {bool isSuccess = false}) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title, style: TextStyle(color: isSuccess ? Colors.green : Colors.red)),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (isSuccess) Navigator.pop(context);
-            },
-            child: const Text('OK'),
-          )
-        ],
-      ),
-    );
+  String _formatRp(dynamic amount) {
+    if (amount == null) return "Rp 0";
+    return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount);
   }
 
   @override
@@ -106,125 +64,250 @@ class _PinjamanScreenState extends State<PinjamanScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgColor,
       appBar: AppBar(
-        title: Text('Pengajuan Pinjaman', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        title: Text('Pinjaman Koperasi', style: GoogleFonts.outfit(color: AppColors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.primary,
+        iconTheme: const IconThemeData(color: AppColors.white),
+        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(LucideIcons.info, color: Colors.blue),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Plafon maksimal adalah 3x Total Simpanan Anda. Pastikan lampiran KTP dan Slip Gaji jelas terbaca.',
-                      style: TextStyle(color: Colors.blue, fontSize: 13),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : RefreshIndicator(
+              onRefresh: _fetchData,
+              color: AppColors.primary,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPlafonCard(),
+                    const SizedBox(height: 32),
+                    Text(
+                      'Pinjaman Aktif & Riwayat',
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
                     ),
-                  )
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            Text('Nominal Pinjaman (Rp)', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nominalController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                hintText: 'Contoh: 5000000',
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Text('Tenor (Bulan)', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _tenorController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                hintText: 'Contoh: 12',
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            Text('Lampiran Wajib', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            _buildFilePicker(
-              title: 'Foto KTP',
-              file: _ktpFile,
-              onTap: () => _pickFile(true),
-            ),
-            const SizedBox(height: 12),
-            _buildFilePicker(
-              title: 'Slip Gaji Bulan Terakhir',
-              file: _slipGajiFile,
-              onTap: () => _pickFile(false),
-            ),
-            
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    const SizedBox(height: 16),
+                    _pinjamanList.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _pinjamanList.length,
+                            itemBuilder: (context, index) {
+                              return _buildPinjamanCard(_pinjamanList[index]);
+                            },
+                          ),
+                    const SizedBox(height: 100), // padding for FAB
+                  ],
                 ),
-                onPressed: _isLoading ? null : _submitPinjaman,
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Ajukan Sekarang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
-            )
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => PengajuanPinjamanScreen(anggotaId: widget.anggotaId))).then((_) => _fetchData());
+        },
+        backgroundColor: AppColors.secondary,
+        icon: const Icon(LucideIcons.fileSignature, color: AppColors.primary),
+        label: const Text('Ajukan Pinjaman', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildPlafonCard() {
+    // Sisa plafon dikurangi total sisa hutang (estimasi)
+    double sisaHutang = 0;
+    for (var p in _pinjamanList) {
+      if (p['status'] == 'DICAIRKAN') {
+        // hitung sisa angsuran yg belum bayar
+        final angsuran = p['angsuran'] as List<dynamic>? ?? [];
+        for (var a in angsuran) {
+          if (a['status'] == 'BELUM_BAYAR') {
+            sisaHutang += a['nominalPokok']; // Atau total tagihan, tergantung kebijakan
+          }
+        }
+      } else if (p['status'] == 'PENDING_ADMIN' || p['status'] == 'PENDING_KETUA') {
+         sisaHutang += p['nominal'];
+      }
+    }
+    
+    double plafonTersedia = _plafon - sisaHutang;
+    if (plafonTersedia < 0) plafonTersedia = 0;
+    
+    final double percent = _plafon > 0 ? (plafonTersedia / _plafon) : 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.surfaceColor, width: 2),
+        boxShadow: [
+          BoxShadow(color: AppColors.primary.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Limit Pinjaman Tersedia', style: TextStyle(color: AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.w500)),
+              const Icon(LucideIcons.shieldCheck, color: AppColors.success, size: 18),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _formatRp(plafonTersedia),
+            style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: percent,
+              backgroundColor: AppColors.surfaceColor,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.secondary),
+              minHeight: 8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Maksimal Plafon: ${_formatRp(_plafon)}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Column(
+          children: [
+            Icon(LucideIcons.fileX, size: 64, color: AppColors.textMuted.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            const Text('Belum ada riwayat pinjaman', style: TextStyle(color: AppColors.textMuted)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFilePicker({required String title, XFile? file, required VoidCallback onTap}) {
+  Widget _buildPinjamanCard(dynamic pinjaman) {
+    final status = pinjaman['status'];
+    final nominal = pinjaman['nominal'];
+    final tenor = pinjaman['tenor'];
+    final date = DateTime.parse(pinjaman['createdAt']);
+    
+    // Status Badge Setup
+    Color statusColor = AppColors.warning;
+    IconData statusIcon = LucideIcons.clock;
+    String statusText = status.replaceAll('_', ' ');
+
+    if (status == 'DICAIRKAN') {
+      statusColor = AppColors.primary;
+      statusIcon = LucideIcons.checkCircle;
+      statusText = 'AKTIF';
+    } else if (status == 'LUNAS') {
+      statusColor = AppColors.success;
+      statusIcon = LucideIcons.checkCheck;
+    } else if (status == 'DITOLAK') {
+      statusColor = AppColors.error;
+      statusIcon = LucideIcons.xCircle;
+    }
+
+    // Progress if AKTIF
+    int cicilanTerbayar = 0;
+    if (status == 'DICAIRKAN' || status == 'LUNAS') {
+       final angsuran = pinjaman['angsuran'] as List<dynamic>? ?? [];
+       cicilanTerbayar = angsuran.where((a) => a['status'] == 'LUNAS').length;
+    }
+
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPinjamanScreen(pinjaman: pinjaman)));
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: file != null ? Colors.green : Colors.grey.withOpacity(0.3)),
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.surfaceColor, width: 2),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(LucideIcons.uploadCloud, color: file != null ? Colors.green : AppColors.primary),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('dd MMM yyyy').format(date),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(statusText, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Pinjaman Tunai', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(_formatRp(nominal), style: GoogleFonts.outfit(fontSize: 18, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Tenor', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('$tenor Bulan', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ],
+                ),
+              ],
+            ),
+            
+            if (status == 'DICAIRKAN') ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  if (file != null)
-                    Text(file.name, style: const TextStyle(fontSize: 12, color: Colors.green), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('Progress Cicilan', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  Text('$cicilanTerbayar / $tenor', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
                 ],
               ),
-            ),
-            if (file != null) const Icon(LucideIcons.checkCircle2, color: Colors.green),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: cicilanTerbayar / tenor,
+                  backgroundColor: AppColors.surfaceColor,
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  minHeight: 6,
+                ),
+              ),
+            ]
           ],
         ),
       ),

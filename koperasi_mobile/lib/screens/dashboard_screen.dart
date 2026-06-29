@@ -1,23 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import '../theme/colors.dart';
-import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/api_service.dart';
+import 'package:intl/intl.dart';
 
 import 'menu_screens.dart';
+import 'notifikasi_screen.dart';
+import 'chat_screen.dart';
+import 'profile_screen.dart';
+import 'simpanan_screen.dart';
+import 'pinjaman_screen.dart';
+import 'angsuran_screen.dart';
+import 'shu_screen.dart';
+import 'riwayat_transaksi_screen.dart';
+import 'pengajuan_pinjaman_screen.dart';
+import 'pengaduan_screen.dart';
 import '../config.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final int? anggotaId;
+  final int anggotaId;
   final String? namaLengkap;
+  final bool isDefaultPassword;
   
   const DashboardScreen({
     super.key,
-    this.anggotaId,
+    required this.anggotaId,
     this.namaLengkap,
+    this.isDefaultPassword = false,
   });
 
   @override
@@ -27,403 +39,394 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   bool _isBalanceHidden = false;
-  String _estimasiSHU = "Memuat...";
-  String _totalSimpanan = "Memuat...";
-  String _sisaPinjaman = "Memuat...";
   
-  String get _namaPanggilan {
-    if (widget.namaLengkap == null) return 'Anggota Koperasi';
-    return widget.namaLengkap!.split(' ').first;
-  }
-  
-  String get _inisial {
-    if (widget.namaLengkap == null) return 'AG';
-    final parts = widget.namaLengkap!.split(' ');
-    if (parts.length > 1) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return widget.namaLengkap!.substring(0, 2).toUpperCase();
-  }
+  Map<String, dynamic>? _dashboardData;
+  int _unreadNotifikasi = 0;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _fetchDashboardData();
+    _fetchUnreadNotifikasi();
   }
 
-  Future<void> _fetchDashboardData() async {
-    final aId = widget.anggotaId ?? 1; // fallback ke 1 jika null untuk testing
-    
+  Future<void> _fetchUnreadNotifikasi() async {
     try {
-      // 1. Fetch Estimasi SHU
-      final resShu = await http.get(Uri.parse('${ApiConfig.baseUrl}/shu/estimasi/$aId'));
-      if (resShu.statusCode == 200) {
-        final data = jsonDecode(resShu.body);
-        final nominal = data['estimasiTotalShu'] as num;
-        if (mounted) setState(() => _estimasiSHU = "Rp ${nominal.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}");
-      } else {
-        if (mounted) setState(() => _estimasiSHU = "Rp 0");
+      final response = await ApiService.get(Uri.parse('${ApiConfig.baseUrl}/notifikasi/unread/${widget.anggotaId}'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) setState(() => _unreadNotifikasi = data['count'] ?? 0);
       }
-      
-      // 2. Fetch Mobile Dashboard Data (Simpanan & Pinjaman)
-      final resDash = await http.get(Uri.parse('${ApiConfig.baseUrl}/dashboard/mobile/$aId'));
-      if (resDash.statusCode == 200) {
-        final data = jsonDecode(resDash.body);
-        final simpanan = data['totalSimpanan'] as num;
-        final pinjaman = data['sisaPinjaman'] as num;
-        
-        if (mounted) {
-          setState(() {
-            _totalSimpanan = "Rp ${simpanan.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}";
-            _sisaPinjaman = "Rp ${pinjaman.toStringAsFixed(0).replaceAll(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), '.')}";
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _totalSimpanan = "Rp 0";
-            _sisaPinjaman = "Rp 0";
-          });
-        }
-      }
-      
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _estimasiSHU = "Gagal memuat";
-          _totalSimpanan = "Gagal memuat";
-          _sisaPinjaman = "Gagal memuat";
-        });
-      }
+      debugPrint('Failed to fetch unread notifikasi: $e');
     }
   }
 
-  final List<String> promoImages = [
-    'https://via.placeholder.com/600x250/0B1E36/FFFFFF?text=Promo+Sembako+Murah',
-    'https://via.placeholder.com/600x250/D4AF37/FFFFFF?text=Diskon+Akhir+Tahun',
-    'https://via.placeholder.com/600x250/1A365D/FFFFFF?text=Beli+Banyak+Makin+Hemat',
-  ];
+  Future<void> _fetchDashboardData() async {
+    final aId = widget.anggotaId;
+    try {
+      setState(() => _isLoading = true);
+      final res = await ApiService.get(Uri.parse('${ApiConfig.baseUrl}/dashboard/mobile/$aId'));
+      if (res.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _dashboardData = jsonDecode(res.body);
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatRp(dynamic amount) {
+    if (amount == null) return "Rp 0";
+    return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount);
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return "-";
+    try {
+      final d = DateTime.parse(dateStr);
+      return DateFormat('dd MMM yyyy', 'id_ID').format(d);
+    } catch (e) {
+      return "-";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 24),
-                _buildHeroCard(),
-                const SizedBox(height: 32),
-                _buildQuickActions(),
-                const SizedBox(height: 32),
-                _buildSHUCard(),
-                const SizedBox(height: 32),
-                _buildPromoSection(),
-                const SizedBox(height: 24),
-              ],
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+        : RefreshIndicator(
+            onRefresh: () async {
+              await _fetchDashboardData();
+              await _fetchUnreadNotifikasi();
+            },
+            color: AppColors.primary,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
+                  _buildTopCurveHeader(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
+                        _buildSummaryGrid(),
+                        const SizedBox(height: 32),
+                        _buildQuickMenuGrid(),
+                        const SizedBox(height: 32),
+                        _buildBannerSection(),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
       bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                _inisial,
-                style: const TextStyle(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Halo,',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  _namaPanggilan,
-                  style: GoogleFonts.outfit(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        Stack(
-          children: [
-            IconButton(
-              icon: const Icon(LucideIcons.bell, color: AppColors.primary),
-              onPressed: () {},
-            ),
-            Positioned(
-              right: 12,
-              top: 12,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-                constraints: const BoxConstraints(
-                  minWidth: 8,
-                  minHeight: 8,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  Widget _buildTopCurveHeader() {
+    final nama = _dashboardData?['namaLengkap'] ?? widget.namaLengkap ?? 'Anggota';
+    final nip = _dashboardData?['nip'] ?? '-';
+    final memberSince = _dashboardData?['createdAt'] != null 
+        ? "Anggota sejak ${_formatDate(_dashboardData!['createdAt'])}" 
+        : "Anggota Koperasi";
 
-  Widget _buildHeroCard() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => RiwayatSimpananScreen(anggotaId: widget.anggotaId ?? 1),
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: AppColors.cardGradient,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20, 
+        left: 20, 
+        right: 20, 
+        bottom: 24
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
-              ),
-              child: Stack(
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo & Title & Notification
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  Positioned(
-                    right: -50,
-                    top: -50,
-                    child: Container(
-                      width: 150,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
-                      ),
+                  Image.asset('assets/images/logo.png', width: 40, height: 40, errorBuilder: (c, e, s) => const Icon(LucideIcons.shield, color: AppColors.secondary, size: 32)),
+                  const SizedBox(width: 12),
+                  Text(
+                    'KOPERASI BAKAMLA RI',
+                    style: GoogleFonts.outfit(
+                      color: AppColors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
                     ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total Simpanan Saya',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isBalanceHidden = !_isBalanceHidden;
-                              });
-                            },
-                            child: Icon(
-                              _isBalanceHidden ? LucideIcons.eyeOff : LucideIcons.eye,
-                              color: Colors.white.withOpacity(0.8),
-                              size: 20,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isBalanceHidden ? 'Rp •••••••' : _totalSimpanan,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          shadows: [
-                            const Shadow(
-                              color: Colors.black26,
-                              offset: Offset(0, 2),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Sisa Pinjaman',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.7),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _isBalanceHidden ? 'Rp •••••••' : _sisaPinjaman,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Text(
-                                'Bayar',
-                                style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
-            ),
+              Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.bell, color: AppColors.white),
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => NotifikasiScreen(anggotaId: widget.anggotaId)));
+                    },
+                  ),
+                  if (_unreadNotifikasi > 0)
+                    Positioned(
+                      right: 12, top: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                      ),
+                    ),
+                ],
+              )
+            ],
           ),
-        ),
+          const SizedBox(height: 24),
+          // User Info
+          Row(
+            children: [
+              Container(
+                width: 60, height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.secondary, width: 2),
+                  color: AppColors.white,
+                ),
+                child: const Icon(LucideIcons.user, size: 30, color: AppColors.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Selamat Pagi,',
+                      style: TextStyle(color: AppColors.white.withOpacity(0.8), fontSize: 13),
+                    ),
+                    Text(
+                      nama,
+                      style: GoogleFonts.outfit(
+                        color: AppColors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'NIP. $nip',
+                      style: TextStyle(color: AppColors.secondary, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      memberSince,
+                      style: TextStyle(color: AppColors.white.withOpacity(0.6), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _isBalanceHidden = !_isBalanceHidden),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _isBalanceHidden ? LucideIcons.eyeOff : LucideIcons.eye,
+                    color: AppColors.secondary,
+                    size: 20,
+                  ),
+                ),
+              )
+            ],
+          )
+        ],
       ),
     );
   }
 
-  Widget _buildQuickActions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSummaryGrid() {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 1.4,
       children: [
-        Text(
-          'Menu Cepat',
-          style: GoogleFonts.outfit(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
-          ),
+        _buildSummaryCard(
+          title: 'Total Simpanan',
+          amount: _dashboardData?['totalSimpanan'],
+          icon: LucideIcons.wallet,
+          color: AppColors.success,
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _actionButton(
-              icon: LucideIcons.wallet,
-              label: 'Ajukan\nPinjaman',
-              color: Colors.blue,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PinjamanScreen())),
-            ),
-            _actionButton(
-              icon: LucideIcons.piggyBank,
-              label: 'Setor\nSimpanan',
-              color: Colors.green,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SimpananScreen())),
-            ),
-            _actionButton(
-              icon: LucideIcons.creditCard,
-              label: 'Bayar\nAngsuran',
-              color: Colors.orange,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AngsuranScreen(anggotaId: widget.anggotaId ?? 1))),
-            ),
-            _actionButton(
-              icon: LucideIcons.shoppingBag,
-              label: 'Toko\nKoperasi',
-              color: AppColors.secondary,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TokoScreen())),
-            ),
-          ],
+        _buildSummaryCard(
+          title: 'Sisa Pinjaman',
+          amount: _dashboardData?['sisaPinjaman'],
+          icon: LucideIcons.creditCard,
+          color: AppColors.error,
+        ),
+        _buildSummaryCard(
+          title: 'Tagihan Bulan Ini',
+          amount: _dashboardData?['tagihanBulanIni'],
+          icon: LucideIcons.calendarClock,
+          color: AppColors.warning,
+          subtitle: _dashboardData?['jatuhTempoTagihan'] != null 
+            ? 'Jatuh Tempo: ${_formatDate(_dashboardData?['jatuhTempoTagihan'])}'
+            : 'Tidak ada tagihan',
+        ),
+        _buildSummaryCard(
+          title: 'Estimasi SHU',
+          amount: _dashboardData?['shuTahunIni'],
+          icon: LucideIcons.coins,
+          color: AppColors.secondary,
         ),
       ],
     );
   }
 
-  Widget _actionButton({required IconData icon, required String label, required Color color, VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(color: Colors.black.withOpacity(0.02)),
-            ),
-            child: Icon(icon, color: color, size: 28),
+  Widget _buildSummaryCard({required String title, required dynamic amount, required IconData icon, required Color color, String? subtitle}) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            const Color(0xFFFAF9F6), // Very light gold/warm white
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.secondary.withOpacity(0.15), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textMain,
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05), 
+            blurRadius: 4, 
+            offset: const Offset(0, 2)
+          ),
+        ],
+        border: Border.all(color: AppColors.secondary.withOpacity(0.3), width: 1),
+      ),
+      child: Stack(
+        children: [
+          // Glossy Shine (White gradient across the top)
+          Positioned(
+            left: -20,
+            top: -20,
+            right: -20,
+            child: Container(
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withOpacity(0.8),
+                    Colors.white.withOpacity(0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Subtle Gold curve at bottom right
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.secondary.withOpacity(0.2),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.goldGradient,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(color: AppColors.secondary.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: Icon(icon, size: 16, color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.2),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  _isBalanceHidden ? 'Rp •••••••' : _formatRp(amount),
+                  style: GoogleFonts.outfit(
+                    color: AppColors.primary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: AppColors.textMuted.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ]
+              ],
             ),
           ),
         ],
@@ -431,184 +434,202 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSHUCard() {
+  Widget _buildQuickMenuGrid() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Layanan Kami',
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 20,
+          crossAxisSpacing: 8,
+          children: [
+            _menuIcon(LucideIcons.piggyBank, 'Simpanan', AppColors.success, () => Navigator.push(context, MaterialPageRoute(builder: (_) => SimpananScreen(anggotaId: widget.anggotaId)))),
+            _menuIcon(LucideIcons.banknote, 'Pinjaman', AppColors.error, () => Navigator.push(context, MaterialPageRoute(builder: (_) => PinjamanScreen(anggotaId: widget.anggotaId)))),
+            _menuIcon(LucideIcons.calculator, 'Angsuran', AppColors.warning, () => Navigator.push(context, MaterialPageRoute(builder: (_) => AngsuranScreen(anggotaId: widget.anggotaId)))),
+            _menuIcon(LucideIcons.award, 'Data SHU', AppColors.secondary, () {
+               Navigator.push(context, MaterialPageRoute(builder: (_) => ShuScreen(anggotaId: widget.anggotaId)));
+            }),
+            _menuIcon(LucideIcons.history, 'Riwayat', AppColors.primaryLight, () {
+               Navigator.push(context, MaterialPageRoute(builder: (_) => RiwayatTransaksiScreen(anggotaId: widget.anggotaId)));
+            }),
+            _menuIcon(LucideIcons.fileSignature, 'Pengajuan', Colors.blue, () {
+               Navigator.push(context, MaterialPageRoute(builder: (_) => PengajuanPinjamanScreen(anggotaId: widget.anggotaId)));
+            }),
+            _menuIcon(LucideIcons.headset, 'Pengaduan', Colors.purple, () {
+               Navigator.push(context, MaterialPageRoute(builder: (_) => PengaduanScreen(anggotaId: widget.anggotaId)));
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _menuIcon(IconData icon, String label, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: color.withOpacity(0.2),
+        highlightColor: color.withOpacity(0.1),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withOpacity(0.2), width: 1),
+                boxShadow: [
+                  BoxShadow(color: color.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMain),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBannerSection() {
+    if (widget.isDefaultPassword) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.error,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: AppColors.error.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.shieldAlert, color: AppColors.white, size: 40),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Peringatan Keamanan!',
+                    style: GoogleFonts.outfit(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Anda masih menggunakan password default. Segera ubah password Anda di menu Profil demi keamanan.',
+                    style: TextStyle(color: AppColors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: AppColors.goldGradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: AppColors.secondary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5)),
         ],
-        border: Border.all(color: Colors.black.withOpacity(0.03)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+          const Icon(LucideIcons.badgePercent, color: AppColors.white, size: 40),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bunga Pinjaman Spesial!',
+                  style: GoogleFonts.outfit(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                child: const Icon(LucideIcons.coins, color: AppColors.secondary),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Estimasi SHU 2026',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _estimasiSHU,
-                    style: GoogleFonts.outfit(
-                      color: AppColors.primary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const Icon(LucideIcons.chevronRight, color: AppColors.textMuted),
+                const SizedBox(height: 4),
+                const Text(
+                  'Hanya 0.8% untuk pengajuan bulan ini.',
+                  style: TextStyle(color: AppColors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          )
         ],
       ),
-    );
-  }
-
-  Widget _buildPromoSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Promo & Informasi',
-          style: GoogleFonts.outfit(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(height: 16),
-        CarouselSlider(
-          options: CarouselOptions(
-            height: 140,
-            viewportFraction: 0.9,
-            enableInfiniteScroll: true,
-            autoPlay: true,
-            autoPlayInterval: const Duration(seconds: 4),
-            enlargeCenterPage: true,
-            enlargeFactor: 0.15,
-          ),
-          items: promoImages.map((imageUrl) {
-            return Builder(
-              builder: (BuildContext context) {
-                return Container(
-                  width: MediaQuery.of(context).size.width,
-                  margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    image: DecorationImage(
-                      image: NetworkImage(imageUrl),
-                      fit: BoxFit.cover,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
+        color: AppColors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
       ),
       child: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
-          if (index == 3) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(anggotaId: widget.anggotaId ?? 1, namaLengkap: widget.namaLengkap ?? 'Anggota Koperasi')));
+          if (index == 4) { // Profil
+            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(anggotaId: widget.anggotaId, namaLengkap: widget.namaLengkap ?? 'Anggota')));
             return;
           }
-          if (index == 2) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(userId: widget.anggotaId?.toString() ?? '1')));
-            return; // Don't change index, just open screen
-          }
-          if (index == 1) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const TokoScreen()));
+          if (index == 3) { // Notifikasi
+            Navigator.push(context, MaterialPageRoute(builder: (_) => NotifikasiScreen(anggotaId: widget.anggotaId)));
             return;
           }
-          setState(() {
-            _selectedIndex = index;
-          });
+          if (index == 2) { // Riwayat
+            Navigator.push(context, MaterialPageRoute(builder: (_) => RiwayatTransaksiScreen(anggotaId: widget.anggotaId)));
+            return;
+          }
+          if (index == 1) { // Toko Koperasi
+            Navigator.push(context, MaterialPageRoute(builder: (_) => TokoScreen(anggotaId: widget.anggotaId)));
+            return;
+          }
+          setState(() => _selectedIndex = index);
         },
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: AppColors.primary,
+        backgroundColor: AppColors.white,
+        selectedItemColor: AppColors.secondary, // Gold active
         unselectedItemColor: AppColors.textMuted,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        showUnselectedLabels: true,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
         elevation: 0,
         items: const [
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: EdgeInsets.only(bottom: 4.0),
-              child: Icon(LucideIcons.home),
-            ),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: EdgeInsets.only(bottom: 4.0),
-              child: Icon(LucideIcons.store),
-            ),
-            label: 'Toko',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: EdgeInsets.only(bottom: 4.0),
-              child: Icon(LucideIcons.messageCircle),
-            ),
-            label: 'Chat',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: EdgeInsets.only(bottom: 4.0),
-              child: Icon(LucideIcons.user),
-            ),
-            label: 'Profil',
-          ),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.store), label: 'Toko Koperasi'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.history), label: 'Riwayat'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.bell), label: 'Notifikasi'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profil'),
         ],
       ),
     );

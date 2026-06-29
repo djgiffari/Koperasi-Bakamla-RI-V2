@@ -25,6 +25,9 @@ import laporanRoutes from './routes/laporan';
 import logsRoutes from './routes/logs';
 
 import broadcastRoutes from './routes/broadcast';
+import notifikasiRoutes from './routes/notifikasi';
+import pengaduanRoutes from './routes/pengaduan';
+import transaksiRoutes from './routes/transaksi';
 
 import prisma from './utils/prisma';
 import { startScheduler } from './utils/scheduler';
@@ -75,6 +78,9 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/laporan', laporanRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/broadcast', broadcastRoutes);
+app.use('/api/notifikasi', notifikasiRoutes);
+app.use('/api/pengaduan', pengaduanRoutes);
+app.use('/api/transaksi', transaksiRoutes);
 
 // Root route
 app.get('/', (req, res) => {

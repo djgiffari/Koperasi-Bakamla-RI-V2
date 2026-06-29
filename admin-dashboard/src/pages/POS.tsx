@@ -21,6 +21,9 @@ const POS: React.FC = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
   const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmTitle, setConfirmTitle] = useState('Konfirmasi');
+  const [confirmBtnText, setConfirmBtnText] = useState('Verifikasi');
+  const [confirmBtnColor, setConfirmBtnColor] = useState('blue');
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ nama: '', kategori: 'Sembako', hargaBeli: '', hargaJual: '', stok: '', gambar: '' });
@@ -41,6 +44,19 @@ const POS: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Polling for Pesanan Online (Real-time updates)
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (activeTab === 'pesanan') {
+      interval = setInterval(() => {
+        fetchData();
+      }, 5000); // Poll every 5 seconds
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeTab]);
 
   // Kasir Calculations
   const cartTotal = cart.reduce((sum, item) => sum + (item.harga * item.qty), 0);
@@ -94,7 +110,10 @@ const POS: React.FC = () => {
   };
 
   const handleDeleteProduct = (id: number, nama: string) => {
+    setConfirmTitle('Hapus Produk');
     setConfirmMessage(`Yakin ingin menghapus produk ${nama}?`);
+    setConfirmBtnText('Hapus');
+    setConfirmBtnColor('red');
     setConfirmAction(() => async () => {
       try {
         await api.delete(`/toko/produk/${id}`);
@@ -115,8 +134,38 @@ const POS: React.FC = () => {
     }
   };
 
-  const handleUpdateOrderStatus = async (id: number, status: string) => {
-    toast.info('Status pesanan diupdate secara otomatis oleh sistem saat ini.');
+  const handleUpdateOrderStatus = async (id: number, anggotaId?: number) => {
+    setConfirmTitle('Verifikasi Pesanan');
+    setConfirmMessage('Verifikasi pesanan ini dan selesaikan transaksi? (Saldo anggota akan terpotong jika metode Potong Saldo).');
+    setConfirmBtnText('Verifikasi');
+    setConfirmBtnColor('blue');
+    setConfirmAction(() => async () => {
+      try {
+        await api.put(`/toko/order/${id}/verify`, { anggotaId });
+        toast.success('Pesanan berhasil diverifikasi dan diselesaikan.');
+        fetchData();
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Gagal memverifikasi pesanan');
+      }
+    });
+    setIsConfirmOpen(true);
+  };
+
+  const handleCancelOrder = async (id: number) => {
+    setConfirmTitle('Tolak Pesanan');
+    setConfirmMessage('Anda yakin ingin menolak dan membatalkan pesanan ini? Stok akan dikembalikan.');
+    setConfirmBtnText('Tolak Pesanan');
+    setConfirmBtnColor('red');
+    setConfirmAction(() => async () => {
+      try {
+        await api.put(`/toko/order/${id}/cancel`);
+        toast.success('Pesanan berhasil ditolak.');
+        fetchData();
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Gagal menolak pesanan');
+      }
+    });
+    setIsConfirmOpen(true);
   };
 
   const handleAddToCart = (product: any) => {
@@ -149,7 +198,10 @@ const POS: React.FC = () => {
       toast.error("Uang tunai kurang!");
       return;
     }
+    setConfirmTitle('Konfirmasi Transaksi');
     setConfirmMessage(`Checkout transaksi senilai Rp ${cartTotal.toLocaleString('id-ID')}?`);
+    setConfirmBtnText('Bayar');
+    setConfirmBtnColor('blue');
     setConfirmAction(() => async () => {
       try {
         const items = cart.map(c => ({ produkId: c.id, jumlah: c.qty }));
@@ -381,6 +433,7 @@ const POS: React.FC = () => {
                   <div key={i} className="flex justify-between items-center py-3">
                     <span className="font-semibold text-slate-700">{cat}</span>
                     <button onClick={() => {
+                        setConfirmTitle('Hapus Kategori');
                         setConfirmMessage(`Hapus kategori ${cat}?`);
                         setConfirmAction(() => () => setCategories(categories.filter(c => c !== cat)));
                         setIsConfirmOpen(true);
@@ -461,6 +514,7 @@ const POS: React.FC = () => {
                   <th className="px-6 py-4 font-bold">Pembayaran</th>
                   <th className="px-6 py-4 font-bold text-center">Status</th>
                   <th className="px-6 py-4 font-bold text-center">Tanggal</th>
+                  <th className="px-6 py-4 font-bold text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -480,6 +534,7 @@ const POS: React.FC = () => {
                       <td className="px-6 py-4 text-center">
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase ${
                           order.status === 'SELESAI' ? 'bg-emerald-100 text-emerald-700' :
+                          order.status === 'BATAL' ? 'bg-red-100 text-red-700' :
                           order.status === 'SIAP_DIAMBIL' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                         }`}>
                           {order.status.replace(/_/g, ' ')}
@@ -487,6 +542,26 @@ const POS: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-xs text-slate-500 text-center">
                         {new Date(order.createdAt).toLocaleDateString('id-ID')}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {order.status === 'PENDING' ? (
+                          <div className="flex gap-2 justify-center">
+                            <button 
+                              onClick={() => handleUpdateOrderStatus(order.id, order.tagihanPaylater?.[0]?.anggotaId)} 
+                              className="bg-secondary hover:bg-secondary-hover text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                            >
+                              Verifikasi
+                            </button>
+                            <button 
+                              onClick={() => handleCancelOrder(order.id)} 
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                            >
+                              Tolak
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">-</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -529,7 +604,17 @@ const POS: React.FC = () => {
         </div>
       </Drawer>
 
-      <ConfirmDialog isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={() => { if(confirmAction) confirmAction(); }} title="Konfirmasi" message={confirmMessage} />
+      <ConfirmDialog 
+        isOpen={isConfirmOpen} 
+        onClose={() => setIsConfirmOpen(false)} 
+        title={confirmTitle}
+        message={confirmMessage} 
+        confirmText={confirmBtnText}
+        confirmColor={confirmBtnColor}
+        onConfirm={() => {
+          if (confirmAction) confirmAction();
+        }} 
+      />
     </div>
   );
 };

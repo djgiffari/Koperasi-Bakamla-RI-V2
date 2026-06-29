@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../utils/api_service.dart';
 import '../../theme/colors.dart';
 import '../../config.dart';
 
@@ -27,7 +28,7 @@ class _KeamananScreenState extends State<KeamananScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final res = await http.put(
+      final res = await ApiService.put(
         Uri.parse('${ApiConfig.baseUrl}/anggota/${widget.anggotaId}/password'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({

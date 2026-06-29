@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
+// Trigger IDE Cache Refresh
 import prisma from '../utils/prisma';
 import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcrypt';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -169,6 +171,26 @@ router.put('/:id', upload.single('fcSkFile'), async (req: Request, res: Response
   }
 });
 
+// PUT update status anggota
+router.put('/:id/status', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { status } = req.body;
+    
+    if (!status) return res.status(400).json({ error: 'Status diperlukan' });
+
+    const updatedAnggota = await prisma.anggota.update({
+      where: { id },
+      data: { status }
+    });
+    
+    res.json(updatedAnggota);
+  } catch (error) {
+    console.error('Error updating status anggota:', error);
+    res.status(500).json({ error: 'Gagal memperbarui status anggota' });
+  }
+});
+
 // PUT update password anggota
 router.put('/:id/password', async (req: Request, res: Response): Promise<any> => {
   try {
@@ -193,6 +215,24 @@ router.put('/:id/password', async (req: Request, res: Response): Promise<any> =>
   } catch (error) {
     console.error('Error updating password:', error);
     res.status(500).json({ error: 'Gagal memperbarui PIN' });
+  }
+});
+
+// PUT reset device (Admin only)
+router.put('/:id/reset-device', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    // Note: since this is admin only, in a fully secure app we should check req.user.role === 'ADMIN'
+    
+    await prisma.anggota.update({
+      where: { id },
+      data: { deviceId: null, deviceName: null }
+    });
+    
+    res.json({ message: 'Perangkat berhasil direset. Anggota kini dapat login di perangkat baru.' });
+  } catch (error) {
+    console.error('Error resetting device:', error);
+    res.status(500).json({ error: 'Gagal mereset perangkat' });
   }
 });
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import multer from 'multer';
 import path from 'path';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -51,9 +52,9 @@ router.get('/mutasi', async (req: Request, res: Response) => {
 });
 
 // GET all balances (Simpanan Induk)
-router.get('/saldo/:anggotaId', async (req: Request, res: Response) => {
+router.get('/saldo/:anggotaId', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
-    const anggotaId = parseInt(req.params.anggotaId as string);
+    const anggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(req.params.anggotaId as string);
     const simpanan = await prisma.simpanan.findMany({
       where: { anggotaId }
     });
@@ -64,9 +65,9 @@ router.get('/saldo/:anggotaId', async (req: Request, res: Response) => {
 });
 
 // GET riwayat mutasi simpanan untuk anggota tertentu
-router.get('/riwayat/:anggotaId', async (req: Request, res: Response) => {
+router.get('/riwayat/:anggotaId', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
-    const anggotaId = parseInt(req.params.anggotaId as string);
+    const anggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(req.params.anggotaId as string);
     const mutasi = await prisma.mutasiSimpanan.findMany({
       where: { anggotaId },
       orderBy: { createdAt: 'desc' }
@@ -78,7 +79,7 @@ router.get('/riwayat/:anggotaId', async (req: Request, res: Response) => {
 });
 
 // POST setor simpanan (Create Mutasi SETORAN) - Used by frontend POST /simpanan
-router.post('/', upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
+router.post('/', authenticateToken, upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
   try {
     const { anggotaId, jenisSimpanan, saldo, nominal, kodeAkun, keterangan, tanggal } = req.body;
     
@@ -87,15 +88,24 @@ router.post('/', upload.single('buktiFile'), async (req: Request, res: Response)
     }
 
     const amount = parseFloat(saldo || nominal || '0');
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Nominal setoran harus lebih besar dari 0' });
+    }
 
     let buktiUrl = null;
     if (req.file) {
       buktiUrl = `/uploads/${req.file.filename}`;
     }
 
+    let validAnggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(anggotaId);
+    const anggotaExist = await prisma.anggota.findUnique({ where: { id: validAnggotaId } });
+    if (!anggotaExist) {
+      return res.status(404).json({ error: 'Data anggota tidak ditemukan' });
+    }
+
     const newMutasi = await prisma.mutasiSimpanan.create({
       data: {
-        anggotaId: parseInt(anggotaId),
+        anggotaId: validAnggotaId,
         jenisSimpanan: jenisSimpanan as any,
         jenisMutasi: 'SETORAN',
         nominal: amount,
@@ -196,12 +206,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 // POST penarikan simpanan sukarela
-router.post('/tarik', async (req: Request, res: Response): Promise<any> => {
+router.post('/tarik', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
     const { anggotaId, nominal, bankTujuan, rekeningTujuan } = req.body;
+    let validAnggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(anggotaId);
     
     const simpananSukarela = await prisma.simpanan.findFirst({
-      where: { anggotaId: parseInt(anggotaId), jenisSimpanan: 'SUKARELA' }
+      where: { anggotaId: validAnggotaId, jenisSimpanan: 'SUKARELA' }
     });
 
     if (!simpananSukarela || simpananSukarela.saldo < parseFloat(nominal)) {
@@ -210,7 +221,7 @@ router.post('/tarik', async (req: Request, res: Response): Promise<any> => {
 
     const penarikan = await prisma.penarikanSimpanan.create({
       data: {
-        anggotaId: parseInt(anggotaId),
+        anggotaId: validAnggotaId,
         nominal: parseFloat(nominal),
         bankTujuan,
         rekeningTujuan,
@@ -222,6 +233,143 @@ router.post('/tarik', async (req: Request, res: Response): Promise<any> => {
   } catch (error) {
     console.error('Error pengajuan penarikan:', error);
     res.status(500).json({ error: 'Gagal mengajukan penarikan' });
+  }
+});
+
+// GET data laporan simpanan
+router.get('/laporan/data', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { startDate, endDate, sortBy } = req.query;
+    
+    let whereClause: any = {
+      status: 'DISETUJUI'
+    };
+
+    if (startDate && endDate) {
+      whereClause.createdAt = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string)
+      };
+    }
+
+    const mutasi = await prisma.mutasiSimpanan.findMany({
+      where: whereClause,
+      include: { anggota: true },
+      orderBy: sortBy === 'nama' 
+        ? { anggota: { namaLengkap: 'asc' } }
+        : { createdAt: 'desc' }
+    });
+
+    let totalPokok = 0;
+    let totalWajib = 0;
+    let totalSukarela = 0;
+
+    const mapped = mutasi.map((m: any) => {
+      const nominal = m.jenisMutasi === 'SETORAN' ? m.nominal : -m.nominal;
+      if (m.jenisSimpanan === 'POKOK') totalPokok += nominal;
+      if (m.jenisSimpanan === 'WAJIB') totalWajib += nominal;
+      if (m.jenisSimpanan === 'SUKARELA') totalSukarela += nominal;
+
+      return {
+        ...m,
+        saldo: m.nominal,
+        kodeInvoice: `INV-${m.id.toString().padStart(4, '0')}`
+      };
+    });
+
+    res.json({
+      summary: { totalPokok, totalWajib, totalSukarela, totalSemua: totalPokok + totalWajib + totalSukarela },
+      data: mapped
+    });
+  } catch (error) {
+    console.error('Error generate laporan:', error);
+    res.status(500).json({ error: 'Gagal men-generate laporan' });
+  }
+});
+
+// PUT edit mutasi simpanan
+router.put('/:id', upload.single('buktiFile'), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { jenisSimpanan, nominal, keterangan, tanggal } = req.body;
+    const newNominal = parseFloat(nominal);
+
+    const updatedMutasi = await prisma.$transaction(async (tx) => {
+      const mutasi = await tx.mutasiSimpanan.findUnique({ where: { id } });
+      if (!mutasi) throw new Error('Mutasi tidak ditemukan');
+
+      let buktiUrl = mutasi.buktiUrl;
+      if (req.file) {
+        buktiUrl = `/uploads/${req.file.filename}`;
+      }
+
+      const delta = newNominal - mutasi.nominal;
+      const requiresBalanceUpdate = (delta !== 0 && mutasi.status === 'DISETUJUI');
+
+      // Update the Mutasi
+      const updated = await tx.mutasiSimpanan.update({
+        where: { id },
+        data: {
+          jenisSimpanan: jenisSimpanan as any,
+          nominal: newNominal,
+          keterangan: keterangan || mutasi.keterangan,
+          buktiUrl: buktiUrl,
+          createdAt: tanggal ? new Date(tanggal) : mutasi.createdAt
+        }
+      });
+
+      if (requiresBalanceUpdate) {
+        // Adjust Simpanan
+        const simpananInduk = await tx.simpanan.findFirst({
+          where: { anggotaId: mutasi.anggotaId, jenisSimpanan: mutasi.jenisSimpanan }
+        });
+        if (simpananInduk) {
+          const adj = mutasi.jenisMutasi === 'SETORAN' ? delta : -delta;
+          await tx.simpanan.update({
+            where: { id: simpananInduk.id },
+            data: { saldo: simpananInduk.saldo + adj }
+          });
+        }
+
+        // Adjust Kas Koperasi
+        const kas = await tx.kasKoperasi.findFirst();
+        if (kas) {
+           const kasAdj = mutasi.jenisMutasi === 'SETORAN' ? delta : -delta;
+           await tx.kasKoperasi.update({ where: { id: kas.id }, data: { saldo: kas.saldo + kasAdj } });
+           
+           await tx.jurnalUmum.create({
+              data: {
+                keterangan: `Penyesuaian Edit ${mutasi.jenisMutasi} Simpanan ${mutasi.jenisSimpanan} - Anggota ${mutasi.anggotaId}`,
+                jenis: kasAdj > 0 ? 'DEBIT' : 'KREDIT',
+                nominal: Math.abs(kasAdj),
+                saldoSetelahnya: kas.saldo + kasAdj,
+                referensiId: String(mutasi.id),
+                tipeReferensi: 'SIMPANAN_EDIT'
+              }
+           });
+        }
+      }
+
+      // Log Aktivitas via raw query into AuditTrail
+      try {
+        const ip = req.ip || req.connection.remoteAddress || 'Unknown';
+        const ua = req.headers['user-agent'] || 'Unknown';
+        // Format action matching the frontend expectations (e.g. 'PUT MutasiSimpanan')
+        await tx.$executeRawUnsafe(
+          'INSERT INTO "AuditTrail" (action, "entityName", "entityId", "newData", "ipAddress", "userAgent", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+          'PUT', 'MutasiSimpanan', String(id), JSON.stringify({ old: mutasi.nominal, new: newNominal }), ip, ua
+        );
+      } catch(e) {
+        console.error('Failed to write AuditTrail:', e);
+      }
+
+      return updated;
+    });
+
+    res.json({ message: 'Mutasi berhasil diupdate', data: updatedMutasi });
+  } catch (error: any) {
+    console.error('Error editing mutasi:', error);
+    res.status(500).json({ error: error.message || 'Gagal mengubah mutasi' });
   }
 });
 

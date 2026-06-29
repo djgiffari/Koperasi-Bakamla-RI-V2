@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/api_service.dart';
 import '../theme/colors.dart';
 import '../config.dart';
 
@@ -33,7 +34,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await ApiService.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/forgot-pin/ticket'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -65,7 +66,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await ApiService.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/forgot-pin/otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -97,7 +98,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await ApiService.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/reset-pin'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({

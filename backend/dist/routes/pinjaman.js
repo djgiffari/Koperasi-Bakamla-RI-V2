@@ -16,6 +16,7 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
@@ -52,30 +53,82 @@ router.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.status(500).json({ error: 'Gagal mengambil data pinjaman' });
     }
 }));
+// GET pinjaman by anggotaId (Mobile)
+router.get('/mobile/:anggotaId', auth_1.authenticateToken, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const anggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(req.params.anggotaId);
+        const pinjaman = yield prisma_1.default.pinjaman.findMany({
+            where: { anggotaId },
+            include: {
+                angsuran: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(pinjaman);
+    }
+    catch (error) {
+        console.error('Error fetching pinjaman anggota:', error);
+        res.status(500).json({ error: 'Gagal mengambil data pinjaman anggota' });
+    }
+}));
+// GET all angsuran
+router.get('/angsuran', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const angsuran = yield prisma_1.default.angsuran.findMany({
+            include: {
+                pinjaman: {
+                    include: { anggota: true }
+                }
+            },
+            orderBy: { jatuhTempo: 'asc' }
+        });
+        res.json(angsuran);
+    }
+    catch (error) {
+        console.error('Error fetching angsuran:', error);
+        res.status(500).json({ error: 'Gagal mengambil data angsuran' });
+    }
+}));
 // POST new pinjaman
-router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipGajiFile', maxCount: 1 }]), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/', auth_1.authenticateToken, upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipGajiFile', maxCount: 1 }]), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { anggotaId, nominal, tenor, skemaBunga } = req.body;
         const parsedNominal = parseFloat(nominal);
-        const id = parseInt(anggotaId);
-        const plafon = yield hitungPlafonMaksimal(id);
+        if (parsedNominal <= 0) {
+            return res.status(400).json({ error: 'Nominal pinjaman harus lebih besar dari 0' });
+        }
+        let validAnggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(anggotaId);
+        const anggotaExist = yield prisma_1.default.anggota.findUnique({ where: { id: validAnggotaId } });
+        if (!anggotaExist) {
+            return res.status(404).json({ error: 'Data anggota tidak ditemukan' });
+        }
+        const plafon = yield hitungPlafonMaksimal(validAnggotaId);
         if (parsedNominal > plafon) {
             return res.status(400).json({ error: `Nominal melebihi plafon pinjaman maksimal (Rp ${plafon})` });
         }
-        const files = req.files;
+        const files = (req.files || {});
         const fileKtpUrl = files['ktpFile'] ? `/uploads/${files['ktpFile'][0].filename}` : null;
         const fileSlipGajiUrl = files['slipGajiFile'] ? `/uploads/${files['slipGajiFile'][0].filename}` : null;
-        // Hitung potongan biaya admin (misal 1%)
-        const biayaAdmin = parsedNominal * 0.01;
-        const nominalCair = parsedNominal - biayaAdmin;
+        // Ambil Pengaturan Biaya
+        const settingAdmin = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_ADMIN_PINJAMAN' } });
+        const settingAsuransi = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'BIAYA_ASURANSI_PINJAMAN' } });
+        const settingBunga = yield prisma_1.default.pengaturanUmum.findFirst({ where: { kategori: 'BUNGA_PINJAMAN' } });
+        // Asumsi nilai persentase, default 1% admin, 0.5% asuransi, 1.5% bunga
+        const persenAdmin = settingAdmin ? parseFloat(settingAdmin.nilai) : 1.0;
+        const persenAsuransi = settingAsuransi ? parseFloat(settingAsuransi.nilai) : 0.5;
+        const bungaPersen = settingBunga ? parseFloat(settingBunga.nilai) : 1.5;
+        const biayaAdmin = parsedNominal * (persenAdmin / 100);
+        const biayaAsuransi = parsedNominal * (persenAsuransi / 100);
+        const nominalCair = parsedNominal - biayaAdmin - biayaAsuransi;
         const newPinjaman = yield prisma_1.default.pinjaman.create({
             data: {
-                anggotaId: id,
+                anggotaId: validAnggotaId,
                 nominal: parsedNominal,
                 tenor: parseInt(tenor),
                 skemaBunga: skemaBunga || 'FLAT',
-                bungaPersen: 1.5, // 1.5% per bulan
+                bungaPersen: bungaPersen,
                 biayaAdmin,
+                biayaAsuransi,
                 nominalCair,
                 plafonMaksimal: plafon,
                 status: parsedNominal >= 10000000 ? 'PENDING_KETUA' : 'PENDING_ADMIN',
@@ -120,7 +173,7 @@ router.put('/:id/status', (req, res) => __awaiter(void 0, void 0, void 0, functi
                 yield tx.kasKoperasi.update({ where: { id: kas.id }, data: { saldo: saldoBaru } });
                 yield tx.jurnalUmum.create({
                     data: {
-                        keterangan: `Pencairan Pinjaman (ID: ${pinjaman.id}) a/n Anggota ${pinjaman.anggotaId}. Nominal: ${pinjaman.nominal}, Potongan: ${pinjaman.biayaAdmin}`,
+                        keterangan: `Pencairan Pinjaman (ID: ${pinjaman.id}) a/n Anggota ${pinjaman.anggotaId}. Nominal: ${pinjaman.nominal}, Potongan Admin: ${pinjaman.biayaAdmin}, Potongan Asuransi: ${pinjaman.biayaAsuransi}`,
                         jenis: 'KREDIT',
                         nominal: pinjaman.nominalCair,
                         saldoSetelahnya: saldoBaru,
@@ -155,6 +208,27 @@ router.put('/:id/status', (req, res) => __awaiter(void 0, void 0, void 0, functi
     catch (error) {
         console.error('Error updating status pinjaman:', error);
         res.status(500).json({ error: error.message || 'Gagal memperbarui status pinjaman' });
+    }
+}));
+// DELETE pinjaman
+router.delete('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const id = parseInt(req.params.id);
+        // Pastikan pinjaman belum dicairkan
+        const pinjaman = yield prisma_1.default.pinjaman.findUnique({ where: { id } });
+        if (!pinjaman)
+            return res.status(404).json({ error: 'Pinjaman tidak ditemukan' });
+        if (pinjaman.status === 'DICAIRKAN' || pinjaman.status === 'LUNAS') {
+            return res.status(400).json({ error: 'Pinjaman yang sudah dicairkan tidak dapat dihapus' });
+        }
+        // Hapus angsuran yang mungkin sudah terbuat
+        yield prisma_1.default.angsuran.deleteMany({ where: { pinjamanId: id } });
+        yield prisma_1.default.pinjaman.delete({ where: { id } });
+        res.json({ message: 'Pinjaman berhasil dihapus' });
+    }
+    catch (error) {
+        console.error('Error deleting pinjaman:', error);
+        res.status(500).json({ error: 'Gagal menghapus pinjaman' });
     }
 }));
 exports.default = router;

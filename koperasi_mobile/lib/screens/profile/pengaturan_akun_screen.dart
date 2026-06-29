@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../utils/api_service.dart';
 import '../../theme/colors.dart';
 import '../../config.dart';
 
@@ -31,7 +32,7 @@ class _PengaturanAkunScreenState extends State<PengaturanAkunScreen> {
 
   Future<void> _fetchData() async {
     try {
-      final res = await http.get(Uri.parse('${ApiConfig.baseUrl}/anggota/${widget.anggotaId}'));
+      final res = await ApiService.get(Uri.parse('${ApiConfig.baseUrl}/anggota/${widget.anggotaId}'));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         setState(() {
@@ -53,7 +54,7 @@ class _PengaturanAkunScreenState extends State<PengaturanAkunScreen> {
   Future<void> _saveData() async {
     setState(() => _isSaving = true);
     try {
-      final res = await http.put(
+      final res = await ApiService.put(
         Uri.parse('${ApiConfig.baseUrl}/anggota/${widget.anggotaId}'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({

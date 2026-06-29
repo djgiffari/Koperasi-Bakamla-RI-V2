@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import multer from 'multer';
 import path from 'path';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -42,6 +43,24 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET pinjaman by anggotaId (Mobile)
+router.get('/mobile/:anggotaId', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const anggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(req.params.anggotaId as string);
+    const pinjaman = await prisma.pinjaman.findMany({
+      where: { anggotaId },
+      include: {
+        angsuran: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(pinjaman);
+  } catch (error) {
+    console.error('Error fetching pinjaman anggota:', error);
+    res.status(500).json({ error: 'Gagal mengambil data pinjaman anggota' });
+  }
+});
+
 // GET all angsuran
 router.get('/angsuran', async (req: Request, res: Response) => {
   try {
@@ -61,19 +80,26 @@ router.get('/angsuran', async (req: Request, res: Response) => {
 });
 
 // POST new pinjaman
-router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipGajiFile', maxCount: 1 }]), async (req: Request, res: Response): Promise<any> => {
+router.post('/', authenticateToken, upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipGajiFile', maxCount: 1 }]), async (req: Request, res: Response): Promise<any> => {
   try {
     const { anggotaId, nominal, tenor, skemaBunga } = req.body;
     
     const parsedNominal = parseFloat(nominal);
-    const id = parseInt(anggotaId);
+    if (parsedNominal <= 0) {
+      return res.status(400).json({ error: 'Nominal pinjaman harus lebih besar dari 0' });
+    }
+    let validAnggotaId = req.user.role === 'ANGGOTA' ? req.user.id : parseInt(anggotaId);
+    const anggotaExist = await prisma.anggota.findUnique({ where: { id: validAnggotaId } });
+    if (!anggotaExist) {
+      return res.status(404).json({ error: 'Data anggota tidak ditemukan' });
+    }
 
-    const plafon = await hitungPlafonMaksimal(id);
+    const plafon = await hitungPlafonMaksimal(validAnggotaId);
     if (parsedNominal > plafon) {
       return res.status(400).json({ error: `Nominal melebihi plafon pinjaman maksimal (Rp ${plafon})` });
     }
 
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
     const fileKtpUrl = files['ktpFile'] ? `/uploads/${files['ktpFile'][0].filename}` : null;
     const fileSlipGajiUrl = files['slipGajiFile'] ? `/uploads/${files['slipGajiFile'][0].filename}` : null;
 
@@ -93,7 +119,7 @@ router.post('/', upload.fields([{ name: 'ktpFile', maxCount: 1 }, { name: 'slipG
 
     const newPinjaman = await prisma.pinjaman.create({
       data: {
-        anggotaId: id,
+        anggotaId: validAnggotaId,
         nominal: parsedNominal,
         tenor: parseInt(tenor),
         skemaBunga: skemaBunga || 'FLAT',
@@ -186,6 +212,28 @@ router.put('/:id/status', async (req: Request, res: Response): Promise<any> => {
   } catch (error: any) {
     console.error('Error updating status pinjaman:', error);
     res.status(500).json({ error: error.message || 'Gagal memperbarui status pinjaman' });
+  }
+});
+// DELETE pinjaman
+router.delete('/:id', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    
+    // Pastikan pinjaman belum dicairkan
+    const pinjaman = await prisma.pinjaman.findUnique({ where: { id } });
+    if (!pinjaman) return res.status(404).json({ error: 'Pinjaman tidak ditemukan' });
+    if (pinjaman.status === 'DICAIRKAN' || pinjaman.status === 'LUNAS') {
+      return res.status(400).json({ error: 'Pinjaman yang sudah dicairkan tidak dapat dihapus' });
+    }
+
+    // Hapus angsuran yang mungkin sudah terbuat
+    await prisma.angsuran.deleteMany({ where: { pinjamanId: id } });
+    
+    await prisma.pinjaman.delete({ where: { id } });
+    res.json({ message: 'Pinjaman berhasil dihapus' });
+  } catch (error) {
+    console.error('Error deleting pinjaman:', error);
+    res.status(500).json({ error: 'Gagal menghapus pinjaman' });
   }
 });
 

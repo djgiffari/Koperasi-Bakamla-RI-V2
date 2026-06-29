@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Radio, Send, Bell } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Radio, Send, Bell, Trash2, Clock } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
@@ -8,6 +8,22 @@ const Broadcast: React.FC = () => {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  const fetchHistory = async () => {
+    try {
+      const data = await api.get('/broadcast');
+      setHistory(data);
+    } catch (error) {
+      console.error('Failed to fetch history', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,10 +37,28 @@ const Broadcast: React.FC = () => {
       toast.success('Pesan siaran berhasil dikirim ke seluruh anggota');
       setTitle('');
       setMessage('');
+      fetchHistory();
     } catch (error) {
       toast.error('Gagal mengirim pesan siaran');
     } finally {
       setIsConfirmOpen(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete('/broadcast', { 
+        createdAt: deleteTarget.createdAt, 
+        judul: deleteTarget.judul 
+      });
+      toast.success('Riwayat broadcast berhasil dihapus');
+      fetchHistory();
+    } catch (error) {
+      toast.error('Gagal menghapus broadcast');
+    } finally {
+      setIsDeleteConfirmOpen(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -98,9 +132,73 @@ const Broadcast: React.FC = () => {
         </div>
       </div>
 
+      {/* Broadcast History Table */}
+      <div className="glass-panel p-6 space-y-4">
+        <h3 className="font-bold text-primary uppercase text-sm mb-4 flex items-center gap-2">
+          <Clock size={16} /> Riwayat Broadcast
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-200">
+                <th className="py-3 px-4 font-semibold text-slate-700 text-sm">Tanggal & Waktu</th>
+                <th className="py-3 px-4 font-semibold text-slate-700 text-sm">Judul Pengumuman</th>
+                <th className="py-3 px-4 font-semibold text-slate-700 text-sm">Penerima</th>
+                <th className="py-3 px-4 font-semibold text-slate-700 text-sm text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.length > 0 ? (
+                history.map((item, idx) => (
+                  <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="py-3 px-4 text-sm text-slate-600 whitespace-nowrap">
+                      {new Date(item.createdAt).toLocaleString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-800 font-medium">
+                      {item.judul}
+                      <p className="text-xs text-slate-500 font-normal mt-1 max-w-xs truncate">{item.pesan}</p>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600">
+                      {Number(item.terkirim)} Anggota
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => {
+                          setDeleteTarget(item);
+                          setIsDeleteConfirmOpen(true);
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Hapus Broadcast"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-400 text-sm">
+                    Belum ada riwayat broadcast yang dikirim.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <ConfirmDialog 
         isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={confirmSend} 
         title="Kirim Pesan Siaran" message={`Anda akan mengirimkan notifikasi ke ratusan perangkat anggota. Lanjutkan?`} 
+        confirmText="Kirim Broadcast" confirmColor="blue"
+      />
+
+      <ConfirmDialog 
+        isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} onConfirm={confirmDelete} 
+        title="Hapus Riwayat Broadcast" message={`Apakah Anda yakin ingin menghapus riwayat broadcast "${deleteTarget?.judul}"? Anggota mungkin tidak bisa melihatnya lagi.`} 
+        confirmText="Hapus Riwayat" confirmColor="red"
       />
     </div>
   );

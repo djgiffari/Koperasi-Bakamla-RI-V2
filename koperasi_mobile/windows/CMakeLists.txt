@@ -55,6 +55,7 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+set(ENV{FIREBASE_CPP_SDK_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/firebase_cpp_sdk/firebase_cpp_sdk_windows")
 include(flutter/generated_plugins.cmake)
 
 

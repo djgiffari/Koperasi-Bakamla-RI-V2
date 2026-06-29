@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/api_service.dart';
 import '../theme/colors.dart';
 import '../config.dart';
 
@@ -15,6 +16,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nipController = TextEditingController();
   final _namaController = TextEditingController();
   final _emailController = TextEditingController();
@@ -23,12 +25,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
 
   Future<void> _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final response = await http.post(
+      final response = await ApiService.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/register-mobile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -136,38 +140,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(color: Colors.white.withOpacity(0.2)),
                           ),
-                          child: Column(
-                            children: [
-                              _buildTextField(
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              children: [
+                                _buildTextField(
                                 controller: _nipController,
-                                hintText: 'NIP / NRP',
-                                icon: LucideIcons.creditCard,
-                                keyboardType: TextInputType.number,
-                              ),
+                                  hintText: 'NIP / NRP',
+                                  icon: LucideIcons.creditCard,
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'NIP tidak boleh kosong';
+                                    if (value.length < 6) return 'NIP minimal 6 digit';
+                                    return null;
+                                  },
+                                ),
                               const SizedBox(height: 16),
                               _buildTextField(
                                 controller: _namaController,
-                                hintText: 'Nama Lengkap',
-                                icon: LucideIcons.user,
-                              ),
+                                  hintText: 'Nama Lengkap',
+                                  icon: LucideIcons.user,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'Nama tidak boleh kosong';
+                                    return null;
+                                  },
+                                ),
                               const SizedBox(height: 16),
                               _buildTextField(
                                 controller: _emailController,
-                                hintText: 'Alamat Email',
-                                icon: LucideIcons.mail,
-                                keyboardType: TextInputType.emailAddress,
-                              ),
+                                  hintText: 'Alamat Email',
+                                  icon: LucideIcons.mail,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'Email tidak boleh kosong';
+                                    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                                    if (!emailRegex.hasMatch(value)) return 'Format email tidak valid';
+                                    return null;
+                                  },
+                                ),
                               const SizedBox(height: 16),
                               _buildTextField(
                                 controller: _passwordController,
                                 hintText: 'PIN Keamanan Baru',
                                 icon: LucideIcons.lock,
-                                isPassword: true,
-                                obscureText: _obscurePassword,
-                                onToggleVisibility: () {
-                                  setState(() => _obscurePassword = !_obscurePassword);
-                                },
-                              ),
+                                  isPassword: true,
+                                  obscureText: _obscurePassword,
+                                  onToggleVisibility: () {
+                                    setState(() => _obscurePassword = !_obscurePassword);
+                                  },
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'Password tidak boleh kosong';
+                                    final passRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+                                    if (!passRegex.hasMatch(value)) {
+                                      return r'Min 8 karakter, huruf besar & kecil, angka, spesial karakter (@$!%*?&)';
+                                    }
+                                    return null;
+                                  },
+                                ),
                               const SizedBox(height: 32),
                               
                               SizedBox(
@@ -191,9 +220,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -216,6 +246,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     bool obscureText = false,
     VoidCallback? onToggleVisibility,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -223,14 +254,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.3)),
       ),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
+        validator: validator,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+          errorStyle: const TextStyle(color: Color(0xFFFFB4AB), fontWeight: FontWeight.bold),
           prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.8)),
           suffixIcon: isPassword
             ? IconButton(

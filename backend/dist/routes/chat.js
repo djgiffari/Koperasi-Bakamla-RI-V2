@@ -19,8 +19,26 @@ const router = (0, express_1.Router)();
 // Untuk Admin, kita ingin melihat semua anggota, dengan jumlah pesan belum terbaca dan pesan terakhir.
 router.get('/contacts', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        // Ambil user ID yang punya riwayat chat dengan admin
+        const chats = yield prisma_1.default.chat.findMany({
+            where: { OR: [{ pengirimId: 'admin' }, { penerimaId: 'admin' }] },
+            select: { pengirimId: true, penerimaId: true }
+        });
+        const userIds = new Set();
+        chats.forEach(c => {
+            if (c.pengirimId !== 'admin') {
+                const id = parseInt(c.pengirimId);
+                if (!isNaN(id))
+                    userIds.add(id);
+            }
+            if (c.penerimaId !== 'admin') {
+                const id = parseInt(c.penerimaId);
+                if (!isNaN(id))
+                    userIds.add(id);
+            }
+        });
         const anggotaList = yield prisma_1.default.anggota.findMany({
-            where: { status: 'AKTIF' },
+            where: { id: { in: Array.from(userIds) }, status: 'AKTIF' },
             select: { id: true, namaLengkap: true, nip: true, fotoProfilUrl: true }
         });
         const contacts = yield Promise.all(anggotaList.map((anggota) => __awaiter(void 0, void 0, void 0, function* () {
@@ -68,6 +86,22 @@ router.get('/contacts', (req, res) => __awaiter(void 0, void 0, void 0, function
         res.status(500).json({ error: 'Gagal mengambil kontak' });
     }
 }));
+// GET jumlah chat yang belum terbaca oleh admin (dari seluruh anggota)
+router.get('/unread-count', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const count = yield prisma_1.default.chat.count({
+            where: {
+                penerimaId: 'admin',
+                isRead: false
+            }
+        });
+        res.json({ count });
+    }
+    catch (error) {
+        console.error('Error fetching unread count:', error);
+        res.status(500).json({ error: 'Gagal mengambil jumlah pesan belum terbaca' });
+    }
+}));
 // GET riwayat pesan spesifik untuk satu user
 router.get('/:userId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -94,6 +128,31 @@ router.get('/:userId', (req, res) => __awaiter(void 0, void 0, void 0, function*
     catch (error) {
         console.error('Error fetching chat history:', error);
         res.status(500).json({ error: 'Gagal mengambil riwayat pesan' });
+    }
+}));
+// POST send message
+router.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { pengirimId, penerimaId, pesan } = req.body;
+        const newChat = yield prisma_1.default.chat.create({
+            data: {
+                pengirimId: String(pengirimId),
+                penerimaId: String(penerimaId),
+                pesan
+            }
+        });
+        // Emit realtime event via Socket.io
+        const io = req.app.get('io');
+        if (io) {
+            io.to(String(penerimaId)).emit('receive_message', newChat);
+            // Juga kirim kembali ke pengirim jika mereka terhubung dari device lain
+            io.to(String(pengirimId)).emit('message_sent', newChat);
+        }
+        res.status(201).json(newChat);
+    }
+    catch (error) {
+        console.error('Error sending message:', error);
+        res.status(500).json({ error: 'Gagal mengirim pesan' });
     }
 }));
 // PUT tandai pesan terbaca

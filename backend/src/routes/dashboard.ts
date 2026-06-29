@@ -227,7 +227,7 @@ router.get('/mobile/:anggotaId', async (req: Request, res: Response): Promise<an
     const pinjamanList = await prisma.pinjaman.findMany({
       where: { 
         anggotaId,
-        status: 'DICAIRKAN'
+        status: { in: ['DICAIRKAN', 'LUNAS'] }
       },
       include: {
         angsuran: true
@@ -237,15 +237,40 @@ router.get('/mobile/:anggotaId', async (req: Request, res: Response): Promise<an
     let sisaPinjaman = 0;
     for (const p of pinjamanList) {
       const angsuranLunas = p.angsuran.filter(a => a.status === 'LUNAS').reduce((acc, curr) => acc + curr.nominalPokok, 0);
-      const totalHutang = p.nominal; // Simplifikasi: nominal awal adalah total hutang
+      const totalHutang = p.nominal; // Simplifikasi
       sisaPinjaman += (totalHutang - angsuranLunas);
     }
+    
+    // Tagihan Bulan Ini
+    const now = new Date();
+    const tagihanBulanIni = await prisma.angsuran.findFirst({
+      where: {
+        pinjaman: { anggotaId },
+        status: 'BELUM_BAYAR',
+        jatuhTempo: {
+          gte: new Date(now.getFullYear(), now.getMonth(), 1),
+          lte: new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        }
+      },
+      orderBy: { jatuhTempo: 'asc' }
+    });
+
+    // SHU Tahun Ini
+    const shuTahunIni = await prisma.riwayatSHU.findFirst({
+      where: { anggotaId },
+      orderBy: { createdAt: 'desc' }
+    });
 
     res.json({
       anggotaId: anggota.id,
       namaLengkap: anggota.namaLengkap,
+      nip: anggota.nip,
+      createdAt: anggota.createdAt,
       totalSimpanan,
-      sisaPinjaman
+      sisaPinjaman,
+      tagihanBulanIni: tagihanBulanIni ? tagihanBulanIni.totalTagihan : 0,
+      jatuhTempoTagihan: tagihanBulanIni ? tagihanBulanIni.jatuhTempo : null,
+      shuTahunIni: shuTahunIni ? shuTahunIni.totalSHU : 0
     });
 
   } catch (error) {

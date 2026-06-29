@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'profil' | 'kebijakan' | 'pembayaran' | 'sistem' | 'master'>('profil');
+  const [activeTab, setActiveTab] = useState<'profil' | 'kebijakan' | 'pembayaran' | 'sistem' | 'master' | 'hukum'>('profil');
 
   const [masterData, setMasterData] = useState<any[]>([]);
   const [newMaster, setNewMaster] = useState({ kategori: 'JENIS_SIMPANAN', nilai: '' });
@@ -19,7 +19,9 @@ const Settings: React.FC = () => {
     NOMINAL_SIMPANAN_WAJIB: '100000',
     PERSENTASE_SHU_DIBAGIKAN: '80',
     REKENING_BANK_KOPERASI: 'Bank Mandiri - 123456789 a/n Koperasi Bakamla',
-    QRIS_IMAGE_URL: ''
+    QRIS_IMAGE_URL: '',
+    SYARAT_KETENTUAN: 'Syarat dan Ketentuan Koperasi Bakamla RI...',
+    KEBIJAKAN_PRIVASI: 'Kebijakan Privasi Koperasi Bakamla RI...'
   });
 
   const fetchMasterData = async () => {
@@ -120,6 +122,12 @@ const Settings: React.FC = () => {
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-left ${activeTab === 'sistem' ? 'bg-primary text-secondary shadow-lg' : 'bg-white/60 text-slate-600 hover:bg-white hover:text-primary'}`}
           >
             <Shield size={18} /> Akses Admin
+          </button>
+          <button 
+            onClick={() => setActiveTab('hukum')} 
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-left ${activeTab === 'hukum' ? 'bg-primary text-secondary shadow-lg' : 'bg-white/60 text-slate-600 hover:bg-white hover:text-primary'}`}
+          >
+            <Shield size={18} /> Hukum & Privasi
           </button>
           <button 
             onClick={() => setActiveTab('master')} 
@@ -256,6 +264,34 @@ const Settings: React.FC = () => {
                   <Link to="/users" className="btn btn-primary mt-2">
                     Buka Halaman Manajemen User
                   </Link>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'hukum' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                <h3 className="font-bold text-primary uppercase text-sm border-b border-slate-200 pb-2">Hukum & Privasi</h3>
+                <p className="text-sm text-slate-500 mb-4">Teks di bawah ini akan tampil pada aplikasi mobile anggota saat mereka membuka halaman Syarat & Ketentuan atau Kebijakan Privasi.</p>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">Syarat & Ketentuan</label>
+                  <textarea 
+                    rows={8} 
+                    value={singleSettings.SYARAT_KETENTUAN} 
+                    onChange={e => setSingleSettings({...singleSettings, SYARAT_KETENTUAN: e.target.value})} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-secondary text-sm resize-y"
+                    placeholder="Masukkan syarat dan ketentuan koperasi..."
+                  ></textarea>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1">Kebijakan Privasi</label>
+                  <textarea 
+                    rows={8} 
+                    value={singleSettings.KEBIJAKAN_PRIVASI} 
+                    onChange={e => setSingleSettings({...singleSettings, KEBIJAKAN_PRIVASI: e.target.value})} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-secondary text-sm resize-y"
+                    placeholder="Masukkan kebijakan privasi..."
+                  ></textarea>
                 </div>
               </div>
             )}

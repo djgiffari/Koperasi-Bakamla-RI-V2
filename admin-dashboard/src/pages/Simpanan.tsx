@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wallet, FileText, Check, X, Eye, Search } from 'lucide-react';
+import { Plus, Trash2, Wallet, FileText, Check, X, Eye, Search, Pencil } from 'lucide-react';
 import Drawer from '../components/Drawer';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -23,6 +23,14 @@ const Simpanan: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  const [isLaporanModalOpen, setIsLaporanModalOpen] = useState(false);
+  const [laporanConfig, setLaporanConfig] = useState({ type: 'all', startDate: '', endDate: '', sortBy: 'tanggal' });
+  const [laporanData, setLaporanData] = useState<any>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const initialForm = { 
     anggotaSearch: '', 
@@ -60,6 +68,41 @@ const Simpanan: React.FC = () => {
   const handleDeleteClick = (id: number) => {
     setDeleteId(id);
     setIsConfirmOpen(true);
+  };
+
+  const handleEditClick = (item: any) => {
+    setEditId(item.id);
+    const dateStr = new Date(item.createdAt).toISOString().slice(0, 16);
+    setFormData({
+      anggotaSearch: `${item.anggota?.nip || ''} - ${item.anggota?.namaLengkap || ''}`,
+      jenisSimpanan: item.jenisSimpanan,
+      kodeAkun: item.kodeAkun || '',
+      nominal: item.saldo.toString(),
+      tanggal: dateStr
+    });
+    setIsEditDrawerOpen(true);
+  };
+
+  const handleCetakLaporan = async () => {
+    try {
+      const query = new URLSearchParams();
+      if (laporanConfig.type === 'range') {
+        query.append('startDate', laporanConfig.startDate);
+        query.append('endDate', laporanConfig.endDate);
+      }
+      query.append('sortBy', laporanConfig.sortBy);
+      
+      const res = await api.get(`/simpanan/laporan/data?${query.toString()}`);
+      setLaporanData(res);
+      setIsLaporanModalOpen(false);
+      setIsPrinting(true);
+      setTimeout(() => {
+        window.print();
+        setIsPrinting(false);
+      }, 500);
+    } catch (error) {
+      toast.error('Gagal mengambil data laporan');
+    }
   };
 
   const confirmDelete = async () => {
@@ -129,6 +172,41 @@ const Simpanan: React.FC = () => {
     }
   };
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editId) return;
+
+    try {
+      const submitData = new FormData();
+      submitData.append('jenisSimpanan', formData.jenisSimpanan);
+      submitData.append('keterangan', formData.kodeAkun);
+      submitData.append('nominal', formData.nominal.replace(/\D/g, ''));
+      if (formData.tanggal) submitData.append('tanggal', formData.tanggal);
+      if (buktiFile) submitData.append('buktiFile', buktiFile);
+
+      const token = localStorage.getItem('koperasi_token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      
+      const response = await fetch(`${API_URL}/simpanan/${editId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: submitData
+      });
+
+      if (!response.ok) throw new Error('Gagal mengupdate');
+      
+      setIsEditDrawerOpen(false);
+      setFormData(initialForm);
+      setBuktiFile(null);
+      setEditId(null);
+      fetchData(); 
+      toast.success('Simpanan berhasil diupdate');
+    } catch (error) {
+      console.error('Error updating simpanan:', error);
+      toast.error('Gagal mengupdate data simpanan');
+    }
+  };
+
   // Extract unique Jenis Simpanan from master data
   const jenisOptions = masterData.filter(d => d.kategori === 'JENIS_SIMPANAN');
   const akunOptions = masterData.filter(d => d.kategori === 'KODE_AKUN');
@@ -137,11 +215,18 @@ const Simpanan: React.FC = () => {
   const availableTabs = ['Semua', ...Array.from(new Set(dataList.map(item => item.jenisSimpanan)))];
   
   const filteredData = dataList.filter(item => {
-    const matchTab = simpananTab === 'Semua' || item.jenisSimpanan === simpananTab;
-    const searchStr = (item.anggota?.namaLengkap || '') + (item.anggota?.nip || '') + (item.kodeInvoice || '');
-    const matchSearch = searchStr.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === 'Semua' || item.status === statusFilter;
-    return matchTab && matchSearch && matchStatus;
+    const matchSearch = item.anggota?.namaLengkap?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                       item.anggota?.nip?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       item.kodeInvoice?.toLowerCase().includes(searchTerm.toLowerCase());
+                       
+    if (simpananTab === 'Verifikasi') {
+      return matchSearch && item.status === 'MENUNGGU_VERIFIKASI';
+    }
+    
+    const matchTab = simpananTab === 'Semua' ? item.status !== 'MENUNGGU_VERIFIKASI' : item.jenisSimpanan === simpananTab;
+    const matchStatus = statusFilter === 'Semua' ? true : item.status === statusFilter;
+    
+    return matchSearch && matchTab && matchStatus;
   });
 
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -156,6 +241,74 @@ const Simpanan: React.FC = () => {
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
   const BASE_URL = API_URL.replace('/api', '');
+
+  if (isPrinting && laporanData) {
+    return (
+      <div className="bg-white min-h-screen text-black p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8 pb-4 border-b-2 border-black">
+            <h1 className="text-2xl font-bold uppercase tracking-wider">Koperasi Bakamla RI</h1>
+            <p className="text-sm mt-1">Laporan Riwayat Transaksi Simpanan Anggota</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {laporanConfig.type === 'range' ? `Periode: ${laporanConfig.startDate} s/d ${laporanConfig.endDate}` : 'Periode: Semua Waktu'}
+            </p>
+          </div>
+
+          <div className="mb-8 p-4 border border-gray-300 rounded-lg bg-gray-50">
+            <h2 className="text-lg font-bold mb-3 border-b border-gray-200 pb-2">Ringkasan Total Simpanan</h2>
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">Total Simpanan Pokok</div>
+                <div className="font-bold text-lg">Rp {laporanData.summary.totalPokok.toLocaleString('id-ID')}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Total Simpanan Wajib</div>
+                <div className="font-bold text-lg">Rp {laporanData.summary.totalWajib.toLocaleString('id-ID')}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Total Simpanan Sukarela</div>
+                <div className="font-bold text-lg">Rp {laporanData.summary.totalSukarela.toLocaleString('id-ID')}</div>
+              </div>
+              <div className="border-l border-gray-300 pl-4">
+                <div className="text-gray-500 font-bold">TOTAL KESELURUHAN</div>
+                <div className="font-bold text-xl text-black">Rp {laporanData.summary.totalSemua.toLocaleString('id-ID')}</div>
+              </div>
+            </div>
+          </div>
+
+          <table className="w-full text-sm border-collapse border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 p-2 text-left">No</th>
+                <th className="border border-gray-300 p-2 text-left">Tanggal</th>
+                <th className="border border-gray-300 p-2 text-left">Nama Anggota</th>
+                <th className="border border-gray-300 p-2 text-left">Jenis Simpanan</th>
+                <th className="border border-gray-300 p-2 text-right">Mutasi Nominal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {laporanData.data.map((item: any, idx: number) => (
+                <tr key={item.id}>
+                  <td className="border border-gray-300 p-2 text-center">{idx + 1}</td>
+                  <td className="border border-gray-300 p-2">{new Date(item.createdAt).toLocaleDateString('id-ID')}</td>
+                  <td className="border border-gray-300 p-2">{item.anggota?.namaLengkap || '-'}</td>
+                  <td className="border border-gray-300 p-2">{item.jenisSimpanan}</td>
+                  <td className="border border-gray-300 p-2 text-right font-mono">
+                    {item.jenisMutasi === 'PENARIKAN' ? '-' : ''}Rp {item.saldo.toLocaleString('id-ID')}
+                  </td>
+                </tr>
+              ))}
+              {laporanData.data.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="border border-gray-300 p-4 text-center text-gray-500">Tidak ada data transaksi pada periode ini.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -189,14 +342,14 @@ const Simpanan: React.FC = () => {
           >
             <option value="Semua">Semua Status</option>
             <option value="DISETUJUI">Disetujui</option>
-            <option value="MENUNGGU_PERSETUJUAN">Menunggu</option>
+            <option value="MENUNGGU_VERIFIKASI">Menunggu</option>
             <option value="DITOLAK">Ditolak</option>
           </select>
 
           <button onClick={() => { setFormData(initialForm); setBuktiFile(null); setIsDrawerOpen(true); }} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl hover:bg-primary/90 transition-all">
             <Plus size={16} /> Tambah Simpanan
           </button>
-          <button className="px-4 py-2.5 bg-white/80 border border-white/50 shadow-sm text-primary rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <button onClick={() => setIsLaporanModalOpen(true)} className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all">
             <FileText size={16} /> Laporan
           </button>
         </div>
@@ -204,16 +357,22 @@ const Simpanan: React.FC = () => {
 
       <div className="glass-panel overflow-hidden">
         {/* Tab Selection */}
-        <div className="flex overflow-x-auto border-b border-slate-200/50 bg-white/30 scrollbar-hide">
-          {availableTabs.map((tab) => (
+        <div className="flex overflow-x-auto no-scrollbar">
+          {['Semua', 'POKOK', 'WAJIB', 'SUKARELA', 'Verifikasi'].map(tab => (
             <button
               key={tab}
-              onClick={() => setSimpananTab(tab)}
-              className={`whitespace-nowrap px-6 py-4 text-sm font-bold uppercase transition-all relative ${simpananTab === tab ? 'text-primary' : 'text-slate-400 hover:text-slate-600 hover:bg-white/20'}`}
+              onClick={() => { setSimpananTab(tab); setCurrentPage(1); }}
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                simpananTab === tab 
+                  ? tab === 'Verifikasi' ? 'text-secondary border-secondary bg-secondary/5' : 'text-primary border-primary bg-primary/5'
+                  : 'text-slate-400 border-transparent hover:text-primary hover:bg-slate-50'
+              }`}
             >
-              {tab}
-              {simpananTab === tab && (
-                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-secondary shadow-[0_0_8px_rgba(212,175,55,0.8)]"></div>
+              {tab === 'Verifikasi' ? 'Verifikasi' : tab}
+              {tab === 'Verifikasi' && dataList.filter(d => d.status === 'MENUNGGU_VERIFIKASI').length > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                  {dataList.filter(d => d.status === 'MENUNGGU_VERIFIKASI').length}
+                </span>
               )}
             </button>
           ))}
@@ -275,12 +434,15 @@ const Simpanan: React.FC = () => {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center gap-2">
-                          {item.status === 'MENUNGGU_PERSETUJUAN' && (
+                          {item.status === 'MENUNGGU_VERIFIKASI' && (
                             <>
                               <button onClick={() => handleUpdateStatus(item.id, 'DISETUJUI')} className="p-2 text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg transition-all" title="Setujui"><Check size={16} /></button>
                               <button onClick={() => handleUpdateStatus(item.id, 'DITOLAK')} className="p-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all" title="Tolak"><X size={16} /></button>
                             </>
                           )}
+                          <button onClick={() => handleEditClick(item)} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-lg transition-all" title="Edit">
+                            <Pencil size={16} />
+                          </button>
                           <button onClick={() => handleDeleteClick(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all" title="Hapus">
                             <Trash2 size={16} />
                           </button>
@@ -341,7 +503,7 @@ const Simpanan: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah Nominal (Rp)</label>
             <input 
-              type="text" required value={formData.nominal} onChange={e => setFormData({...formData, nominal: e.target.value})}
+              type="text" required value={formData.nominal} onChange={e => { let val = e.target.value.replace(/\D/g, ''); setFormData({...formData, nominal: val ? parseInt(val).toLocaleString('id-ID') : ''}); }}
               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary font-mono text-sm" placeholder="500000"
             />
           </div>
@@ -365,6 +527,110 @@ const Simpanan: React.FC = () => {
       </Drawer>
 
       <ConfirmDialog isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={confirmDelete} title="Hapus Data Simpanan" message="Yakin ingin menghapus catatan simpanan ini secara permanen?" />
+      
+      {/* Edit Drawer */}
+      <Drawer isOpen={isEditDrawerOpen} onClose={() => { setIsEditDrawerOpen(false); setEditId(null); setFormData(initialForm); }} title="Edit Simpanan Anggota" onSubmit={handleEditSubmit}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Anggota (Tidak bisa diubah)</label>
+            <input 
+              disabled value={formData.anggotaSearch}
+              className="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-xl outline-none text-sm cursor-not-allowed" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Jenis Simpanan</label>
+            <input 
+              list="jenis-list" required value={formData.jenisSimpanan} onChange={e => setFormData({...formData, jenisSimpanan: e.target.value})}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary text-sm" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kode Akun / Jurnal</label>
+            <input 
+              list="akun-list" value={formData.kodeAkun} onChange={e => setFormData({...formData, kodeAkun: e.target.value})}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah Nominal (Rp)</label>
+            <input 
+              type="text" required value={formData.nominal} onChange={e => { let val = e.target.value.replace(/\D/g, ''); setFormData({...formData, nominal: val ? parseInt(val).toLocaleString('id-ID') : ''}); }}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Waktu Transaksi</label>
+            <input 
+              type="datetime-local" required value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})}
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Bukti Dukung Baru (Opsional)</label>
+            <input 
+              type="file" accept="image/*,.pdf" onChange={e => setBuktiFile(e.target.files ? e.target.files[0] : null)}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none"
+            />
+          </div>
+        </div>
+      </Drawer>
+
+      {/* Laporan Modal */}
+      {isLaporanModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-bold text-slate-800">Cetak Laporan Simpanan</h2>
+              <button onClick={() => setIsLaporanModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded-full shadow-sm">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Periode Data</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" checked={laporanConfig.type === 'all'} onChange={() => setLaporanConfig({...laporanConfig, type: 'all'})} className="accent-primary" />
+                    <span className="text-sm">Semua Waktu</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" checked={laporanConfig.type === 'range'} onChange={() => setLaporanConfig({...laporanConfig, type: 'range'})} className="accent-primary" />
+                    <span className="text-sm">Pilih Tanggal</span>
+                  </label>
+                </div>
+              </div>
+              
+              {laporanConfig.type === 'range' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Dari Tanggal</label>
+                    <input type="date" value={laporanConfig.startDate} onChange={e => setLaporanConfig({...laporanConfig, startDate: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Sampai Tanggal</label>
+                    <input type="date" value={laporanConfig.endDate} onChange={e => setLaporanConfig({...laporanConfig, endDate: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-primary" />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Urutkan Berdasarkan</label>
+                <select value={laporanConfig.sortBy} onChange={e => setLaporanConfig({...laporanConfig, sortBy: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-primary">
+                  <option value="tanggal">Waktu Transaksi (Terbaru)</option>
+                  <option value="nama">Nama Anggota (A-Z)</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button onClick={() => setIsLaporanModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors text-sm">Batal</button>
+              <button onClick={handleCetakLaporan} className="px-4 py-2 bg-primary text-white font-bold rounded-lg shadow hover:bg-secondary transition-colors text-sm flex items-center gap-2">
+                <FileText size={16} /> Cetak Laporan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

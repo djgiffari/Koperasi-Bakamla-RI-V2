@@ -51,6 +51,36 @@ router.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.status(500).json({ error: 'Gagal menambahkan pengaturan' });
     }
 }));
+// POST bulk update single settings
+router.post('/bulk-update', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const settings = req.body;
+        if (!Array.isArray(settings)) {
+            return res.status(400).json({ error: 'Body harus berupa array' });
+        }
+        // Gunakan transaction
+        yield prisma_1.default.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+            for (const item of settings) {
+                // Hapus yang lama (untuk kategori yang sifatnya single)
+                yield tx.pengaturanUmum.deleteMany({
+                    where: { kategori: item.kategori }
+                });
+                // Buat baru
+                yield tx.pengaturanUmum.create({
+                    data: {
+                        kategori: item.kategori,
+                        nilai: item.nilai
+                    }
+                });
+            }
+        }));
+        res.json({ message: 'Pengaturan berhasil diperbarui' });
+    }
+    catch (error) {
+        console.error('Error bulk update pengaturan:', error);
+        res.status(500).json({ error: 'Gagal memperbarui pengaturan' });
+    }
+}));
 // DELETE pengaturan
 router.delete('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

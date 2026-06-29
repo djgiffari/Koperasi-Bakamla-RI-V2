@@ -32,8 +32,18 @@ const pengaturan_1 = __importDefault(require("./routes/pengaturan"));
 const toko_1 = __importDefault(require("./routes/toko"));
 const shu_1 = __importDefault(require("./routes/shu"));
 const chat_1 = __importDefault(require("./routes/chat"));
+const users_1 = __importDefault(require("./routes/users"));
+const laporan_1 = __importDefault(require("./routes/laporan"));
+const logs_1 = __importDefault(require("./routes/logs"));
+const broadcast_1 = __importDefault(require("./routes/broadcast"));
+const notifikasi_1 = __importDefault(require("./routes/notifikasi"));
+const pengaduan_1 = __importDefault(require("./routes/pengaduan"));
+const transaksi_1 = __importDefault(require("./routes/transaksi"));
 const prisma_1 = __importDefault(require("./utils/prisma"));
+const scheduler_1 = require("./utils/scheduler");
 dotenv_1.default.config();
+// Start Background Jobs
+(0, scheduler_1.startScheduler)();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 // Create HTTP Server and bind Socket.io
@@ -44,6 +54,7 @@ const io = new socket_io_1.Server(httpServer, {
         methods: ['GET', 'POST']
     }
 });
+app.set('io', io);
 // Middleware
 app.use(express_1.default.json());
 app.use((0, cors_1.default)());
@@ -57,6 +68,7 @@ if (!fs_1.default.existsSync(uploadDir)) {
 app.use('/uploads', express_1.default.static(uploadDir));
 // Rest API Routes
 app.use('/api/auth', auth_1.default);
+app.use('/api/users', users_1.default);
 app.use('/api/anggota', anggota_1.default);
 app.use('/api/simpanan', simpanan_1.default);
 app.use('/api/pinjaman', pinjaman_1.default);
@@ -66,6 +78,12 @@ app.use('/api/pengaturan', pengaturan_1.default);
 app.use('/api/toko', toko_1.default);
 app.use('/api/shu', shu_1.default);
 app.use('/api/chat', chat_1.default);
+app.use('/api/laporan', laporan_1.default);
+app.use('/api/logs', logs_1.default);
+app.use('/api/broadcast', broadcast_1.default);
+app.use('/api/notifikasi', notifikasi_1.default);
+app.use('/api/pengaduan', pengaduan_1.default);
+app.use('/api/transaksi', transaksi_1.default);
 // Root route
 app.get('/', (req, res) => {
     res.send('API Koperasi Bakamla RI v2');

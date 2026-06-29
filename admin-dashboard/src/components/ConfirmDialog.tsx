@@ -9,6 +9,7 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
+  confirmColor?: string;
 }
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ 
@@ -18,19 +19,10 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title, 
   message,
   confirmText = 'Hapus Data',
-  cancelText = 'Batal'
+  cancelText = 'Batal',
+  confirmColor = 'red'
 }) => {
-  const [render, setRender] = useState(isOpen);
-
-  useEffect(() => {
-    if (isOpen) setRender(true);
-  }, [isOpen]);
-
-  const handleAnimationEnd = () => {
-    if (!isOpen) setRender(false);
-  };
-
-  if (!render) return null;
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -43,7 +35,6 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       
       <div 
         className={`relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col p-6 text-center ${isOpen ? 'modal-bounce' : 'scale-95 opacity-0 transition-all duration-200'}`}
-        onAnimationEnd={handleAnimationEnd}
       >
         <button 
           onClick={onClose}
@@ -73,7 +64,11 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               onConfirm();
               onClose();
             }}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-xl shadow-md shadow-red-600/20 hover:bg-red-700 transition-colors"
+            className={`flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl shadow-md transition-colors ${
+              confirmColor === 'red' ? 'bg-red-600 shadow-red-600/20 hover:bg-red-700' :
+              confirmColor === 'blue' ? 'bg-primary shadow-primary/20 hover:bg-secondary' :
+              'bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700'
+            }`}
           >
             {confirmText}
           </button>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EmptyState from '../components/EmptyState';
-import { CalendarCheck, Search, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { CalendarCheck, Search, CheckCircle, Clock, AlertCircle, Check } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -60,15 +60,32 @@ const Angsuran: React.FC = () => {
       setSelectedAngsuran(null);
     }
   };
+  
+  const [angsuranTab, setAngsuranTab] = useState<'Semua' | 'Verifikasi'>('Semua');
 
   const filtered = angsuranList.filter(a => {
     const term = searchTerm.toLowerCase();
     const nama = a.pinjaman?.anggota?.namaLengkap?.toLowerCase() || '';
     const npp = a.pinjaman?.anggota?.nip?.toLowerCase() || '';
     const matchSearch = nama.includes(term) || npp.includes(term);
-    const matchStatus = statusFilter === 'Semua' || a.status === statusFilter;
+    
+    if (angsuranTab === 'Verifikasi') {
+      return matchSearch && a.status === 'MENUNGGU_VERIFIKASI';
+    }
+    
+    const matchStatus = statusFilter === 'Semua' ? a.status !== 'MENUNGGU_VERIFIKASI' : a.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const handleUpdateStatus = async (id: number, status: string) => {
+    try {
+      await api.put(`/angsuran/${id}/status`, { status });
+      toast.success('Status pembayaran berhasil diupdate');
+      fetchAngsuran();
+    } catch (error) {
+      toast.error('Gagal mengupdate status');
+    }
+  };
 
   const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -108,6 +125,27 @@ const Angsuran: React.FC = () => {
       </div>
 
       <div className="glass-panel overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200/60">
+          <button 
+            onClick={() => { setAngsuranTab('Semua'); setCurrentPage(1); }} 
+            className={`px-6 py-4 text-sm font-bold transition-all border-b-2 ${angsuranTab === 'Semua' ? 'text-primary border-primary bg-primary/5' : 'text-slate-500 border-transparent hover:text-primary hover:bg-primary/5'}`}
+          >
+            Semua Angsuran
+          </button>
+          <button 
+            onClick={() => { setAngsuranTab('Verifikasi'); setCurrentPage(1); }} 
+            className={`px-6 py-4 text-sm font-bold transition-all border-b-2 flex items-center gap-2 ${angsuranTab === 'Verifikasi' ? 'text-secondary border-secondary bg-secondary/5' : 'text-slate-500 border-transparent hover:text-secondary hover:bg-secondary/5'}`}
+          >
+            Verifikasi Pembayaran
+            {angsuranList.filter(a => a.status === 'MENUNGGU_VERIFIKASI').length > 0 && (
+              <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                {angsuranList.filter(a => a.status === 'MENUNGGU_VERIFIKASI').length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
@@ -147,20 +185,33 @@ const Angsuran: React.FC = () => {
                     <td className="px-6 py-4 text-center">
                       <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase flex items-center justify-center gap-1 w-fit mx-auto ${
                         isLunas ? 'bg-emerald-100 text-emerald-700' : 
-                        isTerlambat ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                        isTerlambat ? 'bg-red-100 text-red-700' : 
+                        angsuran.status === 'MENUNGGU_VERIFIKASI' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                       }`}>
-                        {isLunas ? <CheckCircle size={10} /> : isTerlambat ? <AlertCircle size={10} /> : <Clock size={10} />}
                         {angsuran.status.replace(/_/g, ' ')}
                       </span>
+                      {angsuran.lampiranBuktiUrl && (
+                        <a href={`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000'}${angsuran.lampiranBuktiUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline text-xs flex justify-center items-center gap-1 mt-2 font-medium">
+                          Lihat Bukti
+                        </a>
+                      )}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      {!isLunas && (
-                        <button 
-                          onClick={() => handleBayar(angsuran)} 
-                          className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-light shadow-sm transition-colors"
-                        >
-                          Bayar Manual
-                        </button>
+                    <td className="px-6 py-4">
+                      {angsuranTab === 'Verifikasi' && angsuran.status === 'MENUNGGU_VERIFIKASI' ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleUpdateStatus(angsuran.id, 'LUNAS')} className="px-3 py-1.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg text-xs font-bold transition-all shadow-sm">
+                            Terima
+                          </button>
+                          <button onClick={() => handleUpdateStatus(angsuran.id, 'BELUM_BAYAR')} className="px-3 py-1.5 bg-red-500 text-white hover:bg-red-600 rounded-lg text-xs font-bold transition-all shadow-sm">
+                            Tolak
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-center gap-2">
+                          <button onClick={() => handleBayar(angsuran)} disabled={isLunas} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${isLunas ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'}`}>
+                            <Check size={14} /> Bayar
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

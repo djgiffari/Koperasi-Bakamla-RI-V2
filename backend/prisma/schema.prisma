@@ -29,6 +29,7 @@ enum Role {
 
 // Anggota
 model Anggota {
+  notifikasi Notifikasi[]
   id           Int       @id @default(autoincrement())
   nip          String?   @unique
   namaLengkap  String
@@ -49,6 +50,8 @@ model Anggota {
   status        StatusAnggota @default(AKTIF)
   password      String? // Password / PIN untuk mobile
   fcmToken      String? // Untuk push notification
+  deviceId      String? // Untuk binding 1 device 1 akun
+  deviceName    String? // Nama/Model device (cth: iPhone 13 Pro)
 
   simpanan          Simpanan[]
   mutasiSimpanan    MutasiSimpanan[]
@@ -57,6 +60,7 @@ model Anggota {
   transaksi         Transaksi[]
   riwayatSHU        RiwayatSHU[]
   tagihanPaylater   TagihanPaylater[]
+  pengaduan         Pengaduan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -410,4 +414,48 @@ model AuditTrail {
   userAgent  String?
 
   createdAt DateTime @default(now())
+}
+
+model LogAktivitas {
+  id Int @id @default(autoincrement())
+  aksi String
+  entitas String
+  entitasId String?
+  detail String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model Notifikasi {
+  id Int @id @default(autoincrement())
+  anggotaId Int
+  anggota Anggota @relation(fields: [anggotaId], references: [id])
+  judul String
+  pesan String
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Layanan Bantuan / Pengaduan
+model Pengaduan {
+  id          Int      @id @default(autoincrement())
+  anggotaId   Int
+  anggota     Anggota  @relation(fields: [anggotaId], references: [id])
+  kategori    String
+  subjek      String
+  deskripsi   String
+  lampiranUrl String?
+  status      StatusPengaduan @default(OPEN)
+  
+  balasanAdmin String? // Tanggapan dari pengurus
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum StatusPengaduan {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
 }

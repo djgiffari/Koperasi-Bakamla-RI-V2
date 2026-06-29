@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+// Trigger IDE Cache Refresh
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
@@ -35,7 +36,7 @@ router.post('/login', async (req: Request, res: Response): Promise<any> => {
 
 // Login Route (Mobile App / Anggota)
 router.post('/login-mobile', async (req: Request, res: Response): Promise<any> => {
-  const { nip, password, fcmToken } = req.body;
+  const { nip, password, fcmToken, deviceId, deviceName } = req.body;
 
   try {
     const anggota = await prisma.anggota.findUnique({ where: { nip } });
@@ -57,12 +58,30 @@ router.post('/login-mobile', async (req: Request, res: Response): Promise<any> =
        return res.status(403).json({ error: `Akun anda ${anggota.status}. Tidak dapat login.` });
     }
 
-    // Update FCM token if provided
-    if (fcmToken) {
-      await prisma.anggota.update({
-        where: { id: anggota.id },
-        data: { fcmToken }
-      });
+    // Device Binding Logic
+    if (deviceId) {
+      if (!anggota.deviceId) {
+        // First time login -> Bind device
+        await prisma.anggota.update({
+          where: { id: anggota.id },
+          data: { deviceId, deviceName, fcmToken: fcmToken || anggota.fcmToken }
+        });
+      } else if (anggota.deviceId !== deviceId) {
+        // Login from another device -> Reject
+        return res.status(403).json({ error: 'Perangkat tidak dikenali. Hubungi Admin untuk reset perangkat jika Anda menggunakan perangkat baru.' });
+      } else if (fcmToken) {
+         // Update FCM token only
+         await prisma.anggota.update({
+           where: { id: anggota.id },
+           data: { fcmToken }
+         });
+      }
+    } else if (fcmToken) {
+       // Fallback if deviceId not sent by old app version
+       await prisma.anggota.update({
+         where: { id: anggota.id },
+         data: { fcmToken }
+       });
     }
 
     const token = jwt.sign(
@@ -70,7 +89,8 @@ router.post('/login-mobile', async (req: Request, res: Response): Promise<any> =
       JWT_SECRET,
       { expiresIn: '30d' } // Mobile app usually has longer sessions
     );
-    return res.json({ message: 'Login berhasil', token, user: anggota });
+    const isDefaultPassword = password === 'Bakamla123!';
+    return res.json({ message: 'Login berhasil', token, user: anggota, isDefaultPassword });
   } catch (error) {
     console.error('Mobile Login error:', error);
     res.status(500).json({ error: 'Terjadi kesalahan pada server' });
@@ -81,6 +101,18 @@ router.post('/register-mobile', async (req: Request, res: Response): Promise<any
   const { nip, namaLengkap, email, password } = req.body;
 
   try {
+    // Validasi
+    if (!nip || nip.length < 6) {
+      return res.status(400).json({ error: 'NIP harus memiliki minimal 6 digit' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Format email tidak valid' });
+    }
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!password || !passwordRegex.test(password)) {
+      return res.status(400).json({ error: 'Password harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan karakter khusus.' });
+    }
+
     // Check if NIP already exists
     const existing = await prisma.anggota.findUnique({ where: { nip } });
     if (existing) {

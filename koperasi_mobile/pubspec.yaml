@@ -37,10 +37,15 @@ dependencies:
   google_fonts: ^8.1.0
   carousel_slider: ^5.1.2
   lucide_icons_flutter: ^3.1.14+2
-  file_picker: ^11.0.2
+  file_picker: ^8.3.7
   http: ^1.6.0
   image_picker: ^1.2.2
   intl: ^0.20.3
+  firebase_core: ^4.11.0
+  firebase_messaging: ^16.4.1
+  flutter_local_notifications: ^22.0.1
+  device_info_plus: ^11.3.0
+  shared_preferences: ^2.5.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -63,6 +68,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

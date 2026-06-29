@@ -16,6 +16,7 @@ import ManajemenUser from './pages/ManajemenUser';
 import ProfilAdmin from './pages/ProfilAdmin';
 import SystemLogs from './pages/SystemLogs';
 import Broadcast from './pages/Broadcast';
+import Pengaduan from './pages/Pengaduan';
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
 
@@ -48,6 +49,7 @@ function App() {
             <Route path="profil" element={<ProfilAdmin />} />
             <Route path="logs" element={<SystemLogs />} />
             <Route path="broadcast" element={<Broadcast />} />
+            <Route path="pengaduan" element={<Pengaduan />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Route>

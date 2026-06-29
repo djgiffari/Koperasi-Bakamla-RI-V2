@@ -11,7 +11,9 @@ const Pinjaman: React.FC = () => {
   const [dataList, setDataList] = useState<any[]>([]);
   const [anggotaList, setAnggotaList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [subTab, setSubTab] = useState<'workflow' | 'aktif'>('workflow');
+  
+  // Tab State: 'verifikasi' atau 'aktif'
+  const [subTab, setSubTab] = useState<'verifikasi' | 'aktif'>('verifikasi');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Semua');
   
@@ -103,10 +105,10 @@ const Pinjaman: React.FC = () => {
   // Filter Data
   // Filter Data
   const pendingData = dataList.filter(item => {
-    const matchStatusArr = ['PENDING_ADMIN', 'PENDING_BENDAHARA'].includes(item.status);
-    const matchSearch = (item.anggota?.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === 'Semua' || item.status === statusFilter;
-    return matchStatusArr && matchSearch && matchStatus;
+    const isPending = ['PENDING_ADMIN', 'PENDING_BENDAHARA', 'PENDING_KETUA'].includes(item.status);
+    const searchMatch = item.anggota?.namaLengkap?.toLowerCase().includes(searchTerm.toLowerCase());
+    const statusMatch = statusFilter === 'Semua' ? true : item.status === statusFilter;
+    return isPending && searchMatch && statusMatch;
   });
   
   const activeData = dataList.filter(item => {
@@ -116,7 +118,7 @@ const Pinjaman: React.FC = () => {
     return matchStatusArr && matchSearch && matchStatus;
   });
   
-  const displayData = subTab === 'workflow' ? pendingData : activeData;
+  const displayData = subTab === 'verifikasi' ? pendingData : activeData;
   const paginatedData = displayData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const getStatusColor = (status: string) => {
@@ -148,11 +150,11 @@ const Pinjaman: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/50 bg-white/30 px-6">
           <div className="flex">
             <button
-              onClick={() => { setSubTab('workflow'); setStatusFilter('Semua'); setCurrentPage(1); }}
-              className={`py-4 mr-6 text-sm font-bold uppercase transition-all relative ${subTab === 'workflow' ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
+              onClick={() => { setSubTab('verifikasi'); setStatusFilter('Semua'); setCurrentPage(1); }}
+              className={`py-4 mr-6 text-sm font-bold uppercase transition-all relative ${subTab === 'verifikasi' ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <div className="flex items-center gap-2"><UserCheck size={16}/> Workflow Approval</div>
-              {subTab === 'workflow' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-secondary shadow-[0_0_8px_rgba(212,175,55,0.8)]"></div>}
+              <div className="flex items-center gap-2"><UserCheck size={16}/> Verifikasi</div>
+              {subTab === 'verifikasi' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-secondary shadow-[0_0_8px_rgba(212,175,55,0.8)]"></div>}
             </button>
             <button
               onClick={() => { setSubTab('aktif'); setStatusFilter('Semua'); setCurrentPage(1); }}
@@ -178,7 +180,7 @@ const Pinjaman: React.FC = () => {
               onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             >
               <option value="Semua">Semua Status</option>
-              {subTab === 'workflow' ? (
+              {subTab === 'verifikasi' ? (
                 <>
                   <option value="PENDING_ADMIN">Pending Admin</option>
                   <option value="PENDING_BENDAHARA">Pending Bendahara</option>
@@ -227,7 +229,7 @@ const Pinjaman: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {subTab === 'workflow' ? (
+                        {subTab === 'verifikasi' ? (
                           <div className="flex items-center justify-center gap-2">
                             {item.status === 'PENDING_ADMIN' && (
                               <button onClick={() => handleActionClick(item.id, 'PENDING_BENDAHARA')} className="px-3 py-1.5 bg-blue-900 text-blue-100 hover:bg-blue-800 rounded-lg text-xs font-semibold transition-colors">
@@ -283,7 +285,7 @@ const Pinjaman: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nominal Pinjaman (Rp)</label>
             <input 
-              type="text" required value={formData.nominal} onChange={e => setFormData({...formData, nominal: e.target.value})}
+              type="text" required value={formData.nominal} onChange={e => { let val = e.target.value.replace(/\D/g, ''); setFormData({...formData, nominal: val ? parseInt(val).toLocaleString('id-ID') : ''}); }}
               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:border-primary font-mono" placeholder="10000000"
             />
           </div>

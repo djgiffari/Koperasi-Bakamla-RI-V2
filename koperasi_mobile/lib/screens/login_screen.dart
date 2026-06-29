@@ -9,6 +9,10 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 import 'register_screen.dart';
 import 'forgot_pin_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
+import '../utils/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -56,19 +60,53 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     });
 
     try {
-      final response = await http.post(
+      // Get FCM Token
+      String? fcmToken = 'dummy-token';
+      try {
+        final messaging = FirebaseMessaging.instance;
+        await messaging.requestPermission();
+        fcmToken = await messaging.getToken();
+      } catch (e) {
+        print('Error getting FCM token: $e');
+      }
+
+      // Get Device Info
+      String? deviceId;
+      String? deviceName;
+      try {
+        final deviceInfo = DeviceInfoPlugin();
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceId = androidInfo.id;
+          deviceName = '${androidInfo.brand} ${androidInfo.model}';
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceId = iosInfo.identifierForVendor;
+          deviceName = iosInfo.name;
+        }
+      } catch (e) {
+        print('Error getting device info: $e');
+      }
+
+      final response = await ApiService.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/login-mobile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'nip': _nipController.text,
           'password': _passwordController.text,
-          'fcmToken': 'dummy-token' 
+          'fcmToken': fcmToken,
+          'deviceId': deviceId,
+          'deviceName': deviceName
         }),
       );
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        if (data['token'] != null) {
+          await ApiService.setToken(data['token']);
+        }
+        
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -76,6 +114,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               pageBuilder: (context, animation, secondaryAnimation) => DashboardScreen(
                 anggotaId: data['user']['id'],
                 namaLengkap: data['user']['namaLengkap'],
+                isDefaultPassword: data['isDefaultPassword'] ?? false,
               ),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                 return FadeTransition(opacity: animation, child: child);
@@ -199,24 +238,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             );
                           },
                           child: Container(
-                            width: 100,
-                            height: 100,
+                            width: 110,
+                            height: 110,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [AppColors.secondary, Color(0xFFF9D423)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(25),
+                              shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.secondary.withOpacity(0.5),
-                                  blurRadius: 30,
-                                  offset: const Offset(0, 15),
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 25,
+                                  offset: const Offset(0, 10),
                                 ),
                               ],
                             ),
-                            child: const Icon(LucideIcons.shieldCheck, color: AppColors.primary, size: 50),
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.contain,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 32),

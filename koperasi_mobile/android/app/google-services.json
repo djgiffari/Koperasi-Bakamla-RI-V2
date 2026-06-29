@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "771913245658",
+    "project_id": "koperasi-bakamla",
+    "storage_bucket": "koperasi-bakamla.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:771913245658:android:f05842247acd3e063816e3",
+        "android_client_info": {
+          "package_name": "com.example.koperasi_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB83YWm6f0p-LemIPaH_ilAUip2CyfjEZc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Edit2, Trash2, Plus, Upload, Download, CreditCard, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Users, Search, Edit2, Trash2, Plus, Upload, Download, Eye } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Drawer from '../components/Drawer';
 import EmptyState from '../components/EmptyState';
@@ -17,6 +17,9 @@ const Anggota: React.FC = () => {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'semua' | 'menunggu'>('semua');
   
   // Drawer State
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -138,10 +141,25 @@ const Anggota: React.FC = () => {
     }
   };
 
+  const handleApprove = async (id: string) => {
+    try {
+      await api.put(`/anggota/${id}/status`, { status: 'AKTIF' });
+      toast.success('Pendaftaran anggota berhasil disetujui');
+      fetchData();
+    } catch (error) {
+      toast.error('Gagal menyetujui anggota');
+    }
+  };
+
   const filteredData = anggotaList.filter(a => {
     const matchSearch = (a.namaLengkap || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                         (a.nip || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === 'Semua' || a.status === statusFilter;
+    
+    if (activeTab === 'menunggu') {
+      return matchSearch && a.status === 'MENUNGGU_PERSETUJUAN';
+    }
+    
+    const matchStatus = statusFilter === 'Semua' ? a.status !== 'MENUNGGU_PERSETUJUAN' : a.status === statusFilter;
     return matchSearch && matchStatus;
   });
   
@@ -152,6 +170,17 @@ const Anggota: React.FC = () => {
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
   const BASE_URL = API_URL.replace('/api', '');
+
+  const handleResetDevice = async (id: string) => {
+    if (!window.confirm('Yakin ingin mereset ikatan perangkat anggota ini? Anggota akan dapat login dari perangkat baru setelah ini.')) return;
+    try {
+      await api.put(`/anggota/${id}/reset-device`, {});
+      toast.success('Perangkat berhasil direset');
+      fetchData();
+    } catch (error) {
+      toast.error('Gagal mereset perangkat');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -187,7 +216,7 @@ const Anggota: React.FC = () => {
             <option value="Semua">Semua Status</option>
             <option value="AKTIF">Aktif</option>
             <option value="NONAKTIF">Non-Aktif</option>
-            <option value="MENUNGGU_PERSETUJUAN">Menunggu</option>
+            <option value="KELUAR">Keluar</option>
           </select>
           
           <button onClick={handleOpenAdd} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl hover:bg-primary/90 transition-all">
@@ -215,6 +244,27 @@ const Anggota: React.FC = () => {
         />
       ) : (
         <div className="glass-panel overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-slate-200/60">
+            <button 
+              onClick={() => { setActiveTab('semua'); setCurrentPage(1); }} 
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'semua' ? 'text-primary border-primary bg-primary/5' : 'text-slate-500 border-transparent hover:text-primary hover:bg-primary/5'}`}
+            >
+              Data Anggota
+            </button>
+            <button 
+              onClick={() => { setActiveTab('menunggu'); setCurrentPage(1); }} 
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'menunggu' ? 'text-secondary border-secondary bg-secondary/5' : 'text-slate-500 border-transparent hover:text-secondary hover:bg-secondary/5'}`}
+            >
+              Menunggu Konfirmasi
+              {anggotaList.filter(a => a.status === 'MENUNGGU_PERSETUJUAN').length > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                  {anggotaList.filter(a => a.status === 'MENUNGGU_PERSETUJUAN').length}
+                </span>
+              )}
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -228,6 +278,7 @@ const Anggota: React.FC = () => {
                   <th className="px-4 py-4 font-bold">Alamat Rumah</th>
                   <th className="px-4 py-4 font-bold">No. Telepon/HP</th>
                   <th className="px-4 py-4 font-bold">No. Rekening</th>
+                  <th className="px-4 py-4 font-bold min-w-[120px]">Perangkat Aktif</th>
                   <th className="px-4 py-4 font-bold">FC. SK</th>
                   <th className="px-4 py-4 font-bold text-center">Aksi</th>
                 </tr>
@@ -253,6 +304,14 @@ const Anggota: React.FC = () => {
                     <td className="px-4 py-4 text-slate-600 text-xs max-w-[150px] truncate" title={row.alamatRumah || ''}>{row.alamatRumah || '-'}</td>
                     <td className="px-4 py-4 text-slate-600 font-mono">{row.noHp || '-'}</td>
                     <td className="px-4 py-4 text-slate-600 font-mono">{row.noRekening || row.rekeningBni || '-'}</td>
+                    <td className="px-4 py-4 text-slate-600 text-xs">
+                      {row.deviceName ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-semibold text-slate-800">{row.deviceName}</span>
+                          <button onClick={() => handleResetDevice(row.id)} className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200 transition-colors">Reset Perangkat</button>
+                        </div>
+                      ) : '-'}
+                    </td>
                     <td className="px-4 py-4">
                       <div className="flex flex-col items-start gap-1.5">
                         <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${row.fcSkStatus === 'sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
@@ -266,14 +325,25 @@ const Anggota: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => handleOpenEdit(row)} className="p-2 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-lg transition-all" title="Edit Profil">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDeleteClick(row.id)} className="p-2 text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all" title="Hapus Anggota">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      {activeTab === 'semua' ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleOpenEdit(row)} className="p-2 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-lg transition-all" title="Edit Profil">
+                            <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handleDeleteClick(row.id)} className="p-2 text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all" title="Hapus Anggota">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleApprove(row.id)} className="px-3 py-1.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg text-xs font-bold transition-all shadow-sm">
+                            Terima
+                          </button>
+                          <button onClick={() => handleDeleteClick(row.id)} className="px-3 py-1.5 bg-red-500 text-white hover:bg-red-600 rounded-lg text-xs font-bold transition-all shadow-sm">
+                            Tolak
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
